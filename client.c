@@ -164,42 +164,47 @@ void signUp(int sock) {
     printf("========================= SIGNUP ========================\n");
 
     clearBuff();
-    while(1) {
+
+    // Nhập username
+    while (1) {
         printf("Enter username: ");
         fgets(username, 50, stdin);
-        while(strlen(username) <= 0 || username[0] == '\n') {
-            printf("Username is empty!\n");
-            printf("Enter username: ");
-            fgets(username, 50, stdin);
-        }
-        sendWithCheck(sock, username, sizeof(username), 0);
-
-        readWithCheck(sock, buff, BUFF_SIZE);
-        if(atoi(buff) == EXISTENCE_USERNAME) {
-            printf("Username is exist! Try another one\n");
-        }
-        else {
+        username[strcspn(username, "\n")] = '\0'; // Loại bỏ ký tự '\n'
+        if (strlen(username) == 0) {
+            printf("Username is empty! Try again.\n");
+        } else {
             break;
         }
     }
 
-    printf("Enter password: ");
-    fgets(password, 50, stdin);
-    while(strlen(password) <= 0 || password[0] == '\n') {
-        printf("Password is empty!\n");
+    // Nhập password
+    while (1) {
         printf("Enter password: ");
         fgets(password, 50, stdin);
+        password[strcspn(password, "\n")] = '\0'; // Loại bỏ ký tự '\n'
+        if (strlen(password) == 0) {
+            printf("Password is empty! Try again.\n");
+        } else {
+            break;
+        }
     }
-    sendWithCheck(sock, password, sizeof(password), 0);
 
+    // Gửi cả username và password trong một lần
+    snprintf(buff, BUFF_SIZE, "%s|%s", username, password); // Định dạng "username|password"
+    printf("%send\n", buff);
+    sendWithCheck(sock, buff, strlen(buff), 0);
+
+    // Nhận phản hồi từ server
     readWithCheck(sock, buff, BUFF_SIZE);
-    if (atoi(buff) != REGISTER_SUCCESS) {
-        printf("Sytem is under maintenance!\n");
-    }
-    else {
+    if (atoi(buff) == EXISTENCE_USERNAME) {
+        printf("Username already exists! Try another one.\n");
+    } else if (atoi(buff) == REGISTER_SUCCESS) {
         printf("Register account successfully!\n");
+    } else {
+        printf("System is under maintenance!\n");
     }
 }
+
 
 // SIGN IN CLIENT
 int signIn(int sock) {
@@ -210,42 +215,51 @@ int signIn(int sock) {
     printf("========================= SIGNIN ========================\n");
 
     clearBuff();
-    while(1) {
+
+    // Nhập username
+    while (1) {
         printf("Enter username: ");
         fgets(username, 50, stdin);
-        while(strlen(username) <= 0 || username[0] == '\n') {
-            username[0] = '\0';
-            printf("Username is empty!\n");
-            printf("Enter username: ");
-            fgets(username, 50, stdin);
-        }
-        sendWithCheck(sock, username, sizeof(username), 0);
-
-        readWithCheck(sock, buff, BUFF_SIZE);
-        if (atoi(buff) == NON_EXISTENCE_USERNAME) {
-            printf("Username is not exist!\n");
-        }
-        else {
+        username[strcspn(username, "\n")] = '\0'; // Loại bỏ ký tự '\n'
+        if (strlen(username) == 0) {
+            printf("Username is empty! Try again.\n");
+        } else {
             break;
         }
     }
 
-    printf("Enter password: ");
-    fgets(password, 50, stdin);
-    while(strlen(password) <= 0 || password[0] == '\n') {
-        printf("Password is empty!\n");
+    // Nhập password
+    while (1) {
         printf("Enter password: ");
         fgets(password, 50, stdin);
+        password[strcspn(password, "\n")] = '\0'; // Loại bỏ ký tự '\n'
+        if (strlen(password) == 0) {
+            printf("Password is empty! Try again.\n");
+        } else {
+            break;
+        }
     }
-    sendWithCheck(sock, password, sizeof(password) + 1, 0);
+
+    // Đảm bảo buffer đủ để chứa chuỗi "username|password"
+    snprintf(buff, BUFF_SIZE, "%s|%s", username, password); // Định dạng "username|password"
+
+    // Gửi dữ liệu qua socket
+    sendWithCheck(sock, buff, strlen(buff), 0);
+
+    // Nhận phản hồi từ server
     readWithCheck(sock, buff, BUFF_SIZE);
-    if (atoi(buff) != LOGIN_SUCCESS) {
-        printf("Login failed!\n");
-        return 0;
-    }
-    else {
+    int responseCode = atoi(buff);
+    if (responseCode == LOGIN_SUCCESS) {
+        printf("Login successful!\n");
         return 1;
+    } else if (responseCode == NON_EXISTENCE_USERNAME) {
+        printf("Username does not exist!\n");
+    } else if (responseCode == INCORRECT_PASSWORD) {
+        printf("Incorrect password!\n");
+    } else {
+        printf("Login failed! Unknown error.\n");
     }
+    return 0;
 }
 
 void navigation(int sock) {

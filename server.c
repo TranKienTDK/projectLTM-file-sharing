@@ -237,83 +237,103 @@ int main(int argc, char *argv[]) {
 	return 0;  
 }
 
-// SIGN UP SERVER
 void signUp(int sock, singleList *users) {
-    char username[50], password[50], buff[BUFF_SIZE];
+    char buff[BUFF_SIZE];
     int size;
-    sendCode(sock, REGISTER_SUCCESS);
-
-    while(1) {
-        size = readWithCheck(sock, buff, BUFF_SIZE);
-
-        strcpy(username, buff);
-        username[strlen(username) - 1] = '\0';
-        if (username[strlen(username) - 2] == '\n') {
-            username[strlen(username) - 2] = '\0';
-        }
-        printf("username: \'%s\'\n", username);
-        if (checkExistence(1, *users, username) == 1) {
-            sendCode(sock, EXISTENCE_USERNAME);
-        }
-        else {
-            sendCode(sock, REGISTER_SUCCESS);
-            break;
-        }
-    }
+    char username[50], password[50];
     singleList groups;
-    createSingleList(&groups);
 
-    readWithCheck(sock, buff, BUFF_SIZE);
-    buff[strlen(buff) - 1] = '\0';
-    if (buff[strlen(buff) - 2] == '\n') {
-        buff[strlen(buff) - 2] = '\0';
+    sendCode(sock, REGISTER_REQUEST);
+
+    // Nhận cả username và password trong một lần
+    size = readWithCheck(sock, buff, BUFF_SIZE - 1);
+    buff[size] = '\0'; // Đảm bảo chuỗi kết thúc
+    printf("%s %ld\n", buff, strlen(buff));
+
+    // Kiểm tra định dạng trước khi tách
+    char *separator = strchr(buff, '|');
+    if (separator == NULL) {
+        printf("Invalid input format. Expected format: username|password\n");
+        sendCode(sock, INVALID_FORMAT);
+        return;
     }
-    printf("password: %s\n", buff);
 
-    strcpy(password, buff);
-    user_struct *user = (user_struct*)malloc(sizeof(user_struct));
-    strcpy(user->user_name, username);
-	strcpy(user->password, password);
-	user->count_group = 0;
-	user->status = 1;
-	user->joined_groups = groups;
-	insertEnd(users, user);
+    // Tách username
+    size_t username_len = separator - buff;
+    if (username_len >= sizeof(username)) {
+        printf("Username too long!\n");
+        sendCode(sock, INVALID_FORMAT);
+        return;
+    }
+    strncpy(username, buff, username_len);
+    username[username_len] = '\0'; // Đảm bảo chuỗi kết thúc
 
-	sendCode(sock, REGISTER_SUCCESS);
+    // Tách password
+    char *password_start = separator + 1;
+    size_t password_len = strlen(password_start);
+    if (password_len >= sizeof(password)) {
+        printf("Password too long!\n");
+        sendCode(sock, INVALID_FORMAT);
+        return;
+    }
+    strncpy(password, password_start, password_len);
+    password[password_len] = '\0'; // Đảm bảo chuỗi kết thúc
+
+    printf("username: '%s', password: '%s'\n", username, password);
+
+    // Kiểm tra sự tồn tại của username
+    if (checkExistence(1, *users, username) == 1) {
+        sendCode(sock, EXISTENCE_USERNAME);
+    } else {
+        sendCode(sock, REGISTER_SUCCESS);
+
+        // Tạo thông tin tài khoản mới
+        createSingleList(&groups);
+        user_struct *user = (user_struct *)malloc(sizeof(user_struct));
+        strcpy(user->user_name, username);
+        strcpy(user->password, password);
+        user->count_group = 0;
+        user->status = 1;
+        user->joined_groups = groups;
+        insertEnd(users, user);
+
+        printf("Account created successfully: username = %s\n", username);
+    }
 }
 
 // SIGN IN SERVER
 int signIn(int sock, singleList users, user_struct **loginUser) {
     char username[50], password[50], buff[BUFF_SIZE];
 
-    sendCode(sock, LOGIN_SUCCESS);
+    sendCode(sock, LOGIN_REQUEST);
 
-    while(1) {
-        readWithCheck(sock, buff, BUFF_SIZE);
-		buff[strlen(buff) - 1] = '\0';
-		printf("username: %s\n", buff);
-
-		strcpy(username, buff);
-		if(checkExistence(1, users, username) == 1) {
-			sendCode(sock, LOGIN_SUCCESS);
-			break;
-		}
-        else {
-			sendCode(sock, NON_EXISTENCE_USERNAME);
-		}
-    }
+    // Nhận cả username và password trong một lần
     readWithCheck(sock, buff, BUFF_SIZE);
-	buff[strlen(buff) - 1] = '\0';
-	printf("password: %s\n", buff);
-	strcpy(password, buff);
+    buff[strlen(buff)] = '\0'; // Đảm bảo chuỗi được kết thúc đúng
 
-	*loginUser = (user_struct*)(findByName(1, users, username));
-	if(strcmp((*loginUser)->password, password) == 0){
-		sendCode(sock, LOGIN_SUCCESS);
-		return 1;
-	}
-	sendCode(sock, INCORRECT_PASSWORD);
-	return 0;
+    // Phân tách username và password từ buff
+    sscanf(buff, "%[^|]|%s", username, password); // Giả sử định dạng "username|password"
+    username[strlen(username)] = '\0';
+    password[strlen(password)] = '\0';
+
+    printf("Received username: '%s', password: '%s'\n", username, password);
+
+    // Kiểm tra sự tồn tại của username
+    if (checkExistence(1, users, username) == 0) {
+        sendCode(sock, NON_EXISTENCE_USERNAME);
+        return 0;
+    }
+
+    // Tìm user trong danh sách
+    *loginUser = (user_struct *)(findByName(1, users, username));
+    if (strcmp((*loginUser)->password, password) == 0) {
+        sendCode(sock, LOGIN_SUCCESS);
+        return 1;
+    }
+
+    // Nếu password không khớp
+    sendCode(sock, INCORRECT_PASSWORD);
+    return 0;
 }
 
 void * handleThread(void *my_sock) {

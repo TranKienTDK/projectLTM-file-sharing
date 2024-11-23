@@ -62,4 +62,5 @@
 #define NO_ACCEPT_INVITE 916
 #define IS_OWNER_OF_GROUP 917
 #define NO_FILE_TO_RENAME 918
+#define INVALID_FORMAT 919
 //==================================================//
