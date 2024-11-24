@@ -19,6 +19,7 @@ int menu2();
 void navigation(int sock);
 void signUp(int sock);
 int signIn(int sock);
+void createGroup(int sock);
 void clearBuff();
 
 // Function check send and receive data
@@ -262,6 +263,26 @@ int signIn(int sock) {
     return 0;
 }
 
+
+// CREATE GROUP
+void createGroup(int sock) {
+    char group_name[50], buff[BUFF_SIZE];
+
+    readWithCheck(sock, buff, BUFF_SIZE);
+    buff[strlen(buff)] = '\0';
+    int responseCode = atoi(buff);
+    if (responseCode == 11) {
+        printf("Enter group name: ");
+
+        clearBuff();
+
+        fgets(group_name, 50, stdin);
+        group_name[strlen(group_name) - 1] = '\0';
+        sendWithCheck(sock, group_name, strlen(group_name) + 1, 0);
+    }
+}
+
+// MENU APPLICATION
 void navigation(int sock) {
     int z1, z2;
     char buffer[100], code[10], username[50], password[50];
@@ -273,9 +294,41 @@ void navigation(int sock) {
             break;
         case 2:
             if (signIn(sock) == 1) {
-                z2 = menu2();
-                break;
+                do {
+                    z2 = menu2();
+                    switch(z2) {
+                        case 1:
+                            sendCode(sock, CREATE_GROUP_REQUEST);
+                            createGroup(sock);
+                            readWithCheck(sock, buffer, 1000);
+                            // printf("%s\n", buffer);
+                            if (atoi(buffer) == EXISTENCE_GROUP_NAME) {
+                                printf("Group name you typed has been used!\n");
+                            }
+                            else if (atoi(buffer) == CREATE_GROUP_SUCCESS) {
+                                printf("Create group successfully!\n");
+                            }
+                            break;
+                        case 2:
+                            printf("========================== Available Group ==========================\n");
+                            sendCode(sock, JOIN_GROUP_REQUEST);
+                            readWithCheck(sock, buffer, 1000);
+                            break;
+                        case 5:
+                            sendCode(sock, LOGOUT_REQUEST);
+                            readWithCheck(sock, buffer, BUFF_SIZE);
+                            printf("-->Logout: %s\n", buffer);
+                            if (atoi(buffer) == LOGOUT_SUCCESS) {
+                                printf("Logout successfully.\n");
+                            }
+                            break;
+                        default:
+                            z2 = 1;
+                            break;
+                    }
+                } while(z2 >= 1 && z2 < 5);
             }
+            break;
         default:
             break;
     }
