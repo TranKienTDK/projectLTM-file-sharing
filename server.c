@@ -17,7 +17,7 @@
 #include <pthread.h>
 
 #define BUFF_SIZE 100
-singleList users, groups;
+singleList users, groups, requests, files;
 
 // Define function
 void sendWithCheck(int sock, char buff[BUFF_SIZE], int length, int option);
@@ -25,13 +25,19 @@ int readWithCheck(int sock, char buff[BUFF_SIZE], int length);
 void sendCode(int sock, int code);
 void signUp(int sock, singleList *users);
 int signIn(int sock, singleList users, user_struct **loginUser);
+int updateRequest(singleList *requests, char group_name[50], char owner[50], int request_from_user);
+int checkRequestExit(singleList requests, char group_name[50], char owner[50], int request_from_user);
 void readUserFile(singleList *users);
 void readGroupFile(singleList *groups);
+void readRequestFile(singleList* requests);
+void readFileFile(singleList *files);
 void writeToGroupFile(singleList groups);
 int checkExistence(int type, singleList list, char string[50]);
 void* findByName(int type, singleList list, char string[50]);
 int createGroup(int sock, singleList * groups, user_struct *loginUser);
 int addGroupToJoinedGroups(singleList users, char username[50], char group_name[50]);
+singleList unJoinedGroups(singleList groups, singleList users, char username[50]);
+void convertSimpleGroupsToString(singleList simple_group, char str[1000]);
 void * handleThread(void *my_sock);
 
 // Function check send and receive data
@@ -142,6 +148,33 @@ void* findByName(int type, singleList list, char string[50]) {
             printf("Type is invalid! (1,2 or 3)\n");
             break; 
     }
+}
+int updateRequest(singleList *requests, char group_name[50], char user_name[50], int request_from_user) {
+    int tmp = checkRequestExit(*requests, group_name, user_name, request_from_user);
+	if (tmp != 0)
+		return 1 - tmp ;
+	request_struct *request = (request_struct*)malloc(sizeof(request_struct));
+	strcpy(request->group_name, group_name);
+	strcpy(request->user_name, user_name);
+	request->request_from_user = request_from_user;
+	insertEnd(requests, request);
+	return 1 ;
+}
+
+int checkRequestExit(singleList requests, char group_name[50], char user_name[50], int request_from_user) {
+    requests.cur = requests.root;
+	while (requests.cur != NULL) {
+		if(strcmp( ((request_struct*)requests.cur->element)->group_name, group_name) == 0 && strcmp( ((request_struct*)requests.cur->element)->user_name, user_name) == 0){
+			if ( ((request_struct*)requests.cur->element)->request_from_user == request_from_user){
+				return 1;
+			}
+			else {
+				return 2;
+			}
+		}
+		requests.cur = requests.cur->next; 
+	}
+	return 0;
 }
 
 void readUserFile(singleList* users) {
@@ -266,6 +299,85 @@ void readGroupFile(singleList *groups) {
 	fclose(fp);
 }
 
+void readRequestFile(singleList* requests) {
+    char username[50], group_name[50], user_name[50];
+	int request_from_user ;
+	FILE * f = fopen("./storage/request.txt","r");
+
+	if (f == NULL) {
+		perror("Error while opening the file.\n");
+		exit(EXIT_FAILURE);
+	}
+	while (1) {	
+		char c = fgetc(f);
+		if (c != EOF){
+			int res = fseek( f, -1, SEEK_CUR );
+		}
+        else {
+			break;
+		}
+		request_struct *request = (request_struct*)malloc(sizeof(request_struct));
+		fgets(group_name, 50, f);
+		group_name[strlen(group_name) -1 ] = '\0';
+
+		fgets(user_name, 50, f);
+		user_name[strlen(user_name) -1 ] = '\0';
+
+		fscanf(f,"%d\n", &request_from_user);
+
+		strcpy(request->group_name, group_name);
+		strcpy(request->user_name, user_name);
+		request->request_from_user = request_from_user;
+
+		insertEnd(requests, request);
+	}
+	fclose(f);
+}
+
+void readFileFile(singleList *files) {
+    FILE *fp;
+	char str_tmp[100];
+	str_tmp[0] = '\0';
+	fp = fopen("./storage/file.txt", "r");
+	if(fp == NULL) {
+		fprintf(stderr, "File missing: can not find \"file.txt\".\n");
+		exit(-1);
+	}
+
+	while(1) {
+		char c = fgetc(fp);
+    	if (c != EOF){
+			int res = fseek( fp, -1, SEEK_CUR );
+		}else
+        	break;
+	
+		file_struct *file = (file_struct*)malloc(sizeof(file_struct));
+		// name
+		fgets (str_tmp, 100, fp);
+		str_tmp[strlen(str_tmp)-1] = '\0';
+		strcpy(file->name, str_tmp);
+		// owner
+		fgets (str_tmp, 100, fp);
+		str_tmp[strlen(str_tmp)-1] = '\0';
+		strcpy(file->owner, str_tmp);
+		// group
+		fgets (str_tmp, 100, fp);
+		str_tmp[strlen(str_tmp)-1] = '\0';
+		strcpy(file->group, str_tmp);
+		// uploaded
+		fgets (str_tmp, 100, fp);
+		str_tmp[strlen(str_tmp)-1] = '\0';
+		strcpy(file->uploaded_at, str_tmp);
+		fgets (str_tmp, 100, fp);
+		if(str_tmp[strlen(str_tmp)-1] == '\n'){
+			str_tmp[strlen(str_tmp)-1] = '\0';
+		}
+		file->downloaded_times = atoi(str_tmp);
+		insertEnd(files, file);
+	}
+	fclose(fp);
+}
+
 void writeToGroupFile(singleList groups){
 	group_struct* group = NULL;
 	FILE *fp;
@@ -315,6 +427,73 @@ int addGroupToJoinedGroups(singleList users, char username[50], char group_name[
 	return 0;
 }
 
+singleList unJoinedGroups(singleList groups, singleList users, char username[50]) {
+    singleList joined_groups;
+	createSingleList(&joined_groups);
+	singleList un_joined_groups;
+	createSingleList(&un_joined_groups);
+	users.cur = users.root;
+	while(users.cur != NULL) {
+		if(strcmp(((user_struct*)users.cur->element)->user_name, username) == 0){
+			groups.cur = groups.root;
+			joined_groups = ((user_struct*)users.cur->element)->joined_groups;
+			break;
+		}
+		users.cur = users.cur->next;
+	}
+
+	groups.cur = groups.root;
+	while(groups.cur != NULL) {
+		int check = 0;
+		joined_groups.cur = joined_groups.root;
+		while(joined_groups.cur != NULL)
+		{
+			if( strcmp( ((group_struct*)groups.cur->element)->group_name, ((simple_group_struct*)joined_groups.cur->element)->group_name) == 0) {
+				check = 1;
+				break;
+			}
+			joined_groups.cur = joined_groups.cur->next;
+		}
+		if(check == 0){
+			simple_group_struct *group_element = (simple_group_struct*) malloc(sizeof(simple_group_struct));
+			strcpy(group_element->group_name, ((group_struct*)groups.cur->element)->group_name);
+			insertEnd(&un_joined_groups, group_element);
+		}
+		groups.cur = groups.cur->next;
+	}
+	return un_joined_groups;
+}
+
+void convertSimpleGroupsToString(singleList simple_group, char str[1000]) {
+    str[0] = '\0';
+    simple_group.cur = simple_group.root;
+    while (simple_group.cur != NULL) {
+        strcat(str, ((simple_group_struct*)simple_group.cur->element)->group_name);
+        if (simple_group.cur->next == NULL) {
+            str[strlen(str)] = '\0';
+        }
+        else {
+            strcat(str, "+");
+        }
+        simple_group.cur = simple_group.cur->next;
+    }
+}
+
+void writeToRequestFile(singleList requests) {
+    request_struct* request = NULL;
+	FILE * f = fopen("./storage/request.txt","w");
+	requests.cur = requests.root;
+	while (requests.cur != NULL)
+	{
+		request = (request_struct*)(requests.cur->element);
+		fprintf(f,"%s\n", request->group_name);
+		fprintf(f,"%s\n", request->user_name);
+		fprintf(f,"%d\n", request->request_from_user);
+		requests.cur = requests.cur->next;
+	}
+	fclose(f);
+}
+
 //=============== MAIN ==================
 int main(int argc, char *argv[]) {
     if (argc == 1) {
@@ -359,9 +538,13 @@ int main(int argc, char *argv[]) {
 
     createSingleList(&users);
     createSingleList(&groups);
+    createSingleList(&requests);
+    createSingleList(&files);
 
     readUserFile(&users);
     readGroupFile(&groups);
+    readRequestFile(&requests);
+    // readFileFile(&files);
     while(1) {
 		pthread_t tid; 
 
@@ -556,6 +739,40 @@ void * handleThread(void *my_sock) {
                                     saveUsers(users);
                                 }
                                 break;
+                            
+                            case JOIN_GROUP_REQUEST:
+                                printf("JOIN_GROUP_REQUEST\n");
+                                singleList un_joined_group;
+                                createSingleList(&un_joined_group);
+                                un_joined_group = unJoinedGroups(groups, users, loginUser->user_name);
+                                char str[200];
+                                convertSimpleGroupsToString(un_joined_group, str);
+                                sendWithCheck(new_socket, str, strlen(str) + 1, 0);
+                                readWithCheck(new_socket, buff, 100);
+
+                                if (atoi(buff) != NO_GROUP_TO_JOIN) {
+                                    printf("You choosed group: %s\n", buff);
+
+                                    int tmp = updateRequest(&requests, buff, loginUser->user_name, 1);
+                                    if (tmp == 1) {
+										printf("Update request successfully\n");
+                                        printf("REQUESTED_TO_JOIN\n");
+										sendCode(new_socket , REQUESTED_TO_JOIN);
+										writeToRequestFile(requests);
+									} else if (tmp == 0) {
+										printf("Request already exist\n");
+                                        printf("ALREADY_REQUEST_TO_JOIN\n");
+										sendCode(new_socket , ALREADY_REQUESTED_TO_JOIN);
+									} else if (tmp == -1) {
+										printf("User has been invited to the group\n");
+                                        printf("HAS_BEEN_INVITED\n");
+										sendCode(new_socket , HAS_BEEN_INVITED);
+									}
+                                    else {
+                                        printf("No group to join!\n");
+                                    }
+                                    break;
+                                }
 
                             case LOGOUT_REQUEST:
                                 printf("LOGOUT_REQUEST\n");

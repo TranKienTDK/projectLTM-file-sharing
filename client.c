@@ -16,6 +16,7 @@ int readWithCheck(int sock, char buff[BUFF_SIZE], int length);
 void sendCode(int sock, int code);
 int menu1();
 int menu2();
+int menu3(char group_name[50]);
 void navigation(int sock);
 void signUp(int sock);
 int signIn(int sock);
@@ -47,6 +48,21 @@ int readWithCheck(int sock, char buff[BUFF_SIZE], int length) {
         close(sock);
         exit(0);
     }
+}
+
+int printAvailableElements(char str[1000], char available_elements[20][50]) {
+    char *token;
+    int number_of_available_elements = 0;
+
+    token = strtok(str, "+");
+
+    while (token != NULL) {
+        printf( "%d. %s\n", number_of_available_elements + 1, token );
+		strcpy(available_elements[number_of_available_elements], token);
+    	token = strtok(NULL, "+");
+		number_of_available_elements++;
+    }
+    return number_of_available_elements;
 }
 
 void sendCode(int sock, int code){
@@ -155,6 +171,37 @@ int menu2() {
 		return -1;
 	}
 }
+
+int menu3(char group_name[50]) {
+    int choice, catch;
+    char err[10];
+    printf("\n\n");
+    printf("========================== %s ========================\n", group_name);
+    printf("1. Upload\n");
+    printf("2. Download\n");
+    printf("3. Delete file\n");
+	printf("4. Rename file\n");
+    printf("5. View all files\n");
+	printf("6. Approve user\n");
+	printf("7. Invite user\n");
+	printf("8. Kick\n");
+	printf("9. View all users\n");
+	printf("10. Quit group\n");
+	printf("11. Back\n");
+	printf("==========================================================\n");
+    printf("=> Enter your choice: ");
+    catch = scanf("%d", &choice);
+
+    printf("\n\n");
+
+    if (catch > 0) return choice;
+    else {
+        fgets(err, 10, stdin);
+        err[strlen(err) - 1] = '\0';
+        printf("\"%s\" is not allowed!\n", err);
+        return -1;
+    }
+}   
 
 // SIGN UP CLIENT
 void signUp(int sock) {
@@ -313,6 +360,34 @@ void navigation(int sock) {
                             printf("========================== Available Group ==========================\n");
                             sendCode(sock, JOIN_GROUP_REQUEST);
                             readWithCheck(sock, buffer, 1000);
+                            char available_group[20][50] = {'\0','\0','\0','\0','\0','\0','\0','\0','\0','\0','\0','\0','\0','\0','\0','\0','\0','\0','\0','\0'};
+                            int num_of_available_groups = printAvailableElements(buffer, available_group);
+                            int selected_group;
+                            if (num_of_available_groups > 0) {
+                                printf("Which group do you want to join? (1-%d): ", num_of_available_groups);
+                                scanf("%d", &selected_group);
+                                while (selected_group < 1 || selected_group > num_of_available_groups) {
+                                    printf("Group you choose doesn't exist! Please try again!\n");
+                                    printf("Which group do you want to join? (1-%d): ", num_of_available_groups);
+                                    scanf("%d", &selected_group);
+                                }
+                                sendWithCheck(sock, available_group[selected_group - 1], strlen(available_group[selected_group - 1]) + 1 , 0);
+                                readWithCheck(sock, buffer, 1000);
+                                if (atoi(buffer) == REQUESTED_TO_JOIN) {
+                                    printf("Request to join group successfully!\n");
+                                } else if (atoi(buffer) == ALREADY_REQUESTED_TO_JOIN) {
+                                    printf("You have already requested to join this group!\n");
+                                } else if (atoi(buffer) == HAS_BEEN_INVITED) {
+                                    printf("You have been invited to this group!\n");
+                                }
+                                else {
+                                    printf("Something went wrong!\n");
+                                }
+                            }
+                            else {
+                                printf("You have joined all groups!\n");
+                                sendCode(sock, NO_GROUP_TO_JOIN);
+                            }
                             break;
                         case 5:
                             sendCode(sock, LOGOUT_REQUEST);
