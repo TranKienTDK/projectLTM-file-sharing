@@ -36,8 +36,14 @@ int checkExistence(int type, singleList list, char string[50]);
 void* findByName(int type, singleList list, char string[50]);
 int createGroup(int sock, singleList * groups, user_struct *loginUser);
 int addGroupToJoinedGroups(singleList users, char username[50], char group_name[50]);
+int isOwnerOfGroup(singleList groups, char group_name[], char username[]);
+int addMember(singleList groups, char group_name[50], char username[50]);
 singleList unJoinedGroups(singleList groups, singleList users, char username[50]);
+singleList joinedGroups(singleList users, char username[50]);
+singleList unJoinedMembers(singleList users, char group_name[50]);
 void convertSimpleGroupsToString(singleList simple_group, char str[1000]);
+void convertUserRequestsToString(singleList requests, char str[1000]);
+void deleteRequest(singleList *requests, char group_name[50], char user_name[50], int request_from_user);
 void * handleThread(void *my_sock);
 
 // Function check send and receive data
@@ -427,6 +433,37 @@ int addGroupToJoinedGroups(singleList users, char username[50], char group_name[
 	return 0;
 }
 
+int isOwnerOfGroup(singleList groups, char group_name[], char username[]) {
+	groups.cur = groups.root;
+	while(groups.cur != NULL) {
+		if( strcmp( ((group_struct*)groups.cur->element)->group_name, group_name) == 0) {
+			if( strcmp( ((group_struct*)groups.cur->element)->owner, username) == 0){
+				return 1;
+			}
+		}
+		groups.cur = groups.cur->next;
+	}
+	return 0;
+}
+
+int addMember(singleList groups, char group_name[50], char username[50]){
+	printf("add %s member to %s\n", username, group_name);
+	singleList members;
+	createSingleList(&members);
+  	groups.cur = groups.root;
+	while(groups.cur != NULL) {
+		if(strcmp(((group_struct*)groups.cur->element)->group_name, group_name) == 0){
+			simple_user_struct *member_element = (simple_user_struct*) malloc(sizeof(simple_user_struct));
+			strcpy(member_element->user_name, username);
+			insertEnd(&((group_struct*)groups.cur->element)->members, member_element);
+			((group_struct*)groups.cur->element)->number_of_members += 1;
+			return 1;
+		}
+		groups.cur = groups.cur->next;
+	}
+	return 0;
+}
+
 singleList unJoinedGroups(singleList groups, singleList users, char username[50]) {
     singleList joined_groups;
 	createSingleList(&joined_groups);
@@ -464,6 +501,64 @@ singleList unJoinedGroups(singleList groups, singleList users, char username[50]
 	return un_joined_groups;
 }
 
+singleList joinedGroups(singleList users, char username[50]) {
+	singleList joined_groups;
+	createSingleList(&joined_groups);
+	users.cur = users.root;
+	while(users.cur != NULL) {
+		if(strcmp(((user_struct*)users.cur->element)->user_name, username) == 0){
+			joined_groups = ((user_struct*)users.cur->element)->joined_groups;
+			break;
+		}
+		users.cur = users.cur->next;
+	}
+	return joined_groups;
+}
+
+singleList unJoinedMembers(singleList users, char group_name[50]){
+	singleList un_joined_members;
+	createSingleList(&un_joined_members);
+	users.cur = users.root;
+	while(users.cur != NULL)
+	{
+		int check = 0;
+		((user_struct*)users.cur->element)->joined_groups.cur = ((user_struct*)users.cur->element)->joined_groups.root;
+		while(((user_struct*)users.cur->element)->joined_groups.cur != NULL)
+		{
+			if( strcmp( ((simple_group_struct*)((user_struct*)users.cur->element)->joined_groups.cur->element)->group_name, group_name) == 0)
+			{
+				check = 1;
+				break;
+			}
+			((user_struct*)users.cur->element)->joined_groups.cur = ((user_struct*)users.cur->element)->joined_groups.cur->next;
+		}
+		if(check == 0){
+			simple_user_struct *member_element = (simple_user_struct*) malloc(sizeof(simple_user_struct));
+			strcpy(member_element->user_name, ((user_struct*)users.cur->element)->user_name);
+			insertEnd(&un_joined_members, member_element);
+		}
+		users.cur = users.cur->next;
+	}
+	return un_joined_members;
+}
+
+singleList getRequests(singleList requests,char current_group[50]) {
+	singleList requests_of_group;
+	createSingleList(&requests_of_group);
+	requests.cur = requests.root;
+	while(requests.cur != NULL) {
+		if(strcmp(((request_struct*)requests.cur->element)->group_name, current_group) == 0 && ((request_struct*)requests.cur->element)->request_from_user == 1){
+			request_struct *request_element = (request_struct*) malloc(sizeof(request_struct));
+			strcpy(request_element->group_name, ((request_struct*)requests.cur->element)->group_name);
+			strcpy(request_element->user_name, ((request_struct*)requests.cur->element)->user_name);
+			request_element->request_from_user = ((request_struct*)requests.cur->element)->request_from_user;
+			insertEnd(&requests_of_group, request_element);
+		}
+		requests.cur = requests.cur->next;
+	}
+	return requests_of_group;
+}
+
 void convertSimpleGroupsToString(singleList simple_group, char str[1000]) {
     str[0] = '\0';
     simple_group.cur = simple_group.root;
@@ -477,6 +572,47 @@ void convertSimpleGroupsToString(singleList simple_group, char str[1000]) {
         }
         simple_group.cur = simple_group.cur->next;
     }
+}
+
+void convertUserRequestsToString(singleList requests, char str[1000]){
+	str[0] = '\0';
+	requests.cur = requests.root;
+	while(requests.cur != NULL)
+  	{
+		strcat(str, ((request_struct*)requests.cur->element)->user_name);
+		if(requests.cur->next == NULL){
+			str[strlen(str)] = '\0';
+		}else{
+			strcat(str, "+");
+		}
+		requests.cur = requests.cur->next;
+  	}
+}
+
+void deleteRequest(singleList *requests, char group_name[50], char user_name[50], int request_from_user) {
+	if( strcmp( ((request_struct*)(*requests).root->element)->group_name, group_name) == 0 && strcmp( ((request_struct*)(*requests).root->element)->user_name, user_name) == 0){
+		if ( ((request_struct*)(*requests).root->element)->request_from_user == request_from_user){
+			(*requests).root = deleteBegin(requests);
+		}
+	}
+	else {
+		(*requests).cur = (*requests).prev = (*requests).root;
+		while((*requests).cur != NULL)
+		{
+			if( strcmp( ((request_struct*)(*requests).cur->element)->group_name, group_name) == 0 && strcmp( ((request_struct*)(*requests).cur->element)->user_name, user_name) == 0){
+				if ( ((request_struct*)(*requests).cur->element)->request_from_user == request_from_user){
+					break;
+				}
+			}
+			(*requests).prev = (*requests).cur;
+			(*requests).cur = (*requests).cur->next;
+		}
+		if((*requests).cur != NULL){
+			(*requests).prev->next = (*requests).cur->next;
+			(*requests).cur = (*requests).prev;
+		}
+	}
+
 }
 
 void writeToRequestFile(singleList requests) {
@@ -624,22 +760,83 @@ void signUp(int sock, singleList *users) {
     }
 }
 
-// SIGN IN SERVER
+// // SIGN IN SERVER
+// int signIn(int sock, singleList users, user_struct **loginUser) {
+//     char username[50], password[50], buff[BUFF_SIZE];
+
+//     sendCode(sock, LOGIN_REQUEST);
+
+//     // Nhận cả username và password trong một lần
+//     readWithCheck(sock, buff, BUFF_SIZE);
+//     buff[strlen(buff)] = '\0'; // Đảm bảo chuỗi được kết thúc đúng
+
+//     // Phân tách username và password từ buff
+//     sscanf(buff, "%[^|]|%s", username, password); // Giả sử định dạng "username|password"
+//     username[strlen(username)] = '\0';
+//     password[strlen(password)] = '\0';
+
+//     printf("Received username: '%s', password: '%s' \n", username, password);
+
+//     // Kiểm tra sự tồn tại của username
+//     if (checkExistence(1, users, username) == 0) {
+//         sendCode(sock, NON_EXISTENCE_USERNAME);
+//         return 0;
+//     }
+
+//     // Tìm user trong danh sách
+//     *loginUser = (user_struct *)(findByName(1, users, username));
+//     if (strcmp((*loginUser)->password, password) == 0) {
+//         sendCode(sock, LOGIN_SUCCESS);
+//         return 1;
+//     }
+
+//     // Nếu password không khớp
+//     sendCode(sock, INCORRECT_PASSWORD);
+//     return 0;
+// }
+
+// SIGNIN SERVER
 int signIn(int sock, singleList users, user_struct **loginUser) {
-    char username[50], password[50], buff[BUFF_SIZE];
+    char buff[BUFF_SIZE];
+    char username[50], password[50];
 
     sendCode(sock, LOGIN_REQUEST);
 
     // Nhận cả username và password trong một lần
-    readWithCheck(sock, buff, BUFF_SIZE);
-    buff[strlen(buff)] = '\0'; // Đảm bảo chuỗi được kết thúc đúng
+    int size = readWithCheck(sock, buff, BUFF_SIZE - 1);
+    buff[size] = '\0'; // Đảm bảo chuỗi kết thúc
+    printf("Received raw input: '%s'\n", buff);
 
-    // Phân tách username và password từ buff
-    sscanf(buff, "%[^|]|%s", username, password); // Giả sử định dạng "username|password"
-    username[strlen(username)] = '\0';
-    password[strlen(password)] = '\0';
+    // Tìm dấu phân tách '|'
+    char *separator = strchr(buff, '|');
+    if (separator == NULL) {
+        printf("Invalid input format. Expected format: username|password\n");
+        sendCode(sock, INVALID_FORMAT);
+        return 0;
+    }
 
-    printf("Received username: '%s', password: '%s'\n", username, password);
+    // Tách username
+    size_t username_len = separator - buff;
+    if (username_len >= sizeof(username)) {
+        printf("Username too long!\n");
+        sendCode(sock, INVALID_FORMAT);
+        return 0;
+    }
+    strncpy(username, buff, username_len);
+    username[username_len] = '\0'; // Đảm bảo chuỗi kết thúc
+
+    // Tách password
+    char *password_start = separator + 1;
+    size_t password_len = strlen(password_start);
+    if (password_len >= sizeof(password)) {
+        printf("Password too long!\n");
+        sendCode(sock, INVALID_FORMAT);
+        return 0;
+    }
+    strncpy(password, password_start, password_len);
+    password[password_len] = '\0'; // Đảm bảo chuỗi kết thúc
+
+    printf("Extracted username: '%s', password: '%s'\n", username, password);
 
     // Kiểm tra sự tồn tại của username
     if (checkExistence(1, users, username) == 0) {
@@ -773,6 +970,108 @@ void * handleThread(void *my_sock) {
                                     }
                                     break;
                                 }
+							
+							case ACCESS_GROUP_REQUEST:
+								printf("ACCESS_GROUP_REQUEST\n");
+								singleList joined_group;
+								createSingleList(&joined_group);
+								joined_group = joinedGroups(users, loginUser->user_name);
+								convertSimpleGroupsToString(joined_group, str);
+								sendWithCheck(new_socket, str, strlen(str) + 1, 0);
+								readWithCheck(new_socket, buff, 100);
+								if (atoi(buff) != NO_GROUP_TO_ACCESS) {
+									printf("Group has choosed: %s\n", buff);
+									char current_group[50];
+									strcpy(current_group, buff);
+									sendCode(new_socket, ACCESS_GROUP_SUCCESS);
+									while (REQUEST != BACK_REQUEST) {
+										readWithCheck(new_socket, buff, 100);
+										REQUEST = atoi(buff);
+
+										switch(REQUEST) {
+											case UPLOAD_REQUEST: 
+												/* code */
+											
+											case INVITE_MEMBER_REQUEST:
+												printf("INVITE_MEMBER_REQUEST\n");
+												if (isOwnerOfGroup(groups, current_group, loginUser->user_name) == 0) {
+													sendCode(new_socket, NOT_OWNER_OF_GROUP);
+												}
+												else {
+													singleList unjoined_members;
+													createSingleList(&unjoined_members);
+													unjoined_members = unJoinedMembers(users, current_group);
+													convertSimpleGroupsToString(unjoined_members, str);
+													sendWithCheck(new_socket, str, strlen(str) + 1, 0);
+													readWithCheck(new_socket, buff, 100);
+													if (atoi(buff) != NO_MEMBER_TO_INVITE && atoi(buff) != NO_INVITE) {
+														printf("group = %s, member = %s\n", current_group, buff);
+														//update request to join group
+														int tmp = updateRequest(&requests, current_group, buff, 0);
+														if (tmp == 1) {
+															printf("Update request successfully\n");
+															sendCode(new_socket , INVITE_SUCCESS);
+															writeToRequestFile(requests);
+														}
+														else if (tmp == 0) {
+															printf("Request already exist\n");
+															sendCode(new_socket , HAS_BEEN_INVITED);
+														}
+														else if (tmp == -1) {
+															printf("User has requested to join this group\n");
+															sendCode(new_socket , ALREADY_REQUESTED_TO_JOIN);
+														}
+													} else if (atoi(buff) == NO_MEMBER_TO_INVITE) {
+														printf("No member to invite.\n");
+													} else if (atoi(buff) == NO_INVITE) {
+														printf("No invite.\n");
+													}
+												}
+												break;
+											
+											case APPROVE_REQUEST:
+												printf("APPROVE_REQUEST\n");
+												if(isOwnerOfGroup(groups, current_group,loginUser->user_name) == 0){
+														sendCode(new_socket, NOT_OWNER_OF_GROUP);
+												}
+												else {
+													singleList request_list;
+													createSingleList(&request_list);
+													request_list = getRequests(requests, current_group);
+													convertUserRequestsToString(request_list, str);
+
+													sendWithCheck(new_socket, str, strlen(str) + 1, 0);
+													readWithCheck(new_socket, buff, 100);
+													if (atoi(buff) != NO_REQUEST_TO_APPROVE && atoi(buff) != NO_REQUEST_WERE_ACCEPTED) {
+														printf("group = %s, member = %s\n", current_group, buff);
+														
+														//delete request
+														deleteRequest(&requests, current_group, buff, 1);
+														writeToRequestFile(requests);
+														// checkUser(users);
+														if (addMember(groups, current_group, buff) + addGroupToJoinedGroups(users, buff, current_group) == 2) {
+															sendCode(new_socket, APPROVE_SUCCESS);
+															// checkUser(users);
+															saveUsers(users);
+															writeToGroupFile(groups);
+														}
+														else {
+															sendWithCheck(new_socket , "Something went wrong", 21, 0 );
+														}
+													}
+												}
+												break;
+											
+											case BACK_REQUEST:
+												printf("BACK_REQUEST\n");
+												writeToGroupFile(groups);
+												break;
+											default:
+												break;
+										}
+									}
+								}
+								break;
 
                             case LOGOUT_REQUEST:
                                 printf("LOGOUT_REQUEST\n");

@@ -331,7 +331,7 @@ void createGroup(int sock) {
 
 // MENU APPLICATION
 void navigation(int sock) {
-    int z1, z2;
+    int z1, z2, z3;
     char buffer[100], code[10], username[50], password[50];
     z1 = menu1();
 
@@ -387,6 +387,128 @@ void navigation(int sock) {
                             else {
                                 printf("You have joined all groups!\n");
                                 sendCode(sock, NO_GROUP_TO_JOIN);
+                            }
+                            break;
+                        case 3:
+                            printf("==================== Available Group ====================\n");
+                            sendCode(sock, ACCESS_GROUP_REQUEST);
+                            readWithCheck(sock, buffer, 1000);
+                            num_of_available_groups = printAvailableElements(buffer, available_group);
+                            if (num_of_available_groups > 0) {
+                                printf("Which group do you want to access? (1-%d): ", num_of_available_groups);
+                                scanf("%d", &selected_group);
+                                while (selected_group < 1 || selected_group > num_of_available_groups) {
+                                    printf("Group you choose doesn't exist! Please try again!\n");
+                                    printf("Which group do you want to access? (1-%d): ", num_of_available_groups);
+                                    scanf("%d", &selected_group);
+                                }
+                                sendWithCheck(sock, available_group[selected_group - 1], strlen(available_group[selected_group - 1]) + 1, 0);
+                                readWithCheck(sock, buffer, 1000);
+                                if (atoi(buffer) == ACCESS_GROUP_SUCCESS) {
+                                    printf("=> Access %s successfully!\n", available_group[selected_group - 1]);
+                                    z3 = 0;
+                                }
+                                else {
+                                    printf("Something went wrong!\n");
+                                }
+
+                            }
+                            else {
+                                printf("You have not joined any groups!\n");
+                                sendCode(sock, NO_GROUP_TO_ACCESS);
+                                z3 = 11;
+                            }
+                            while (z3 != 11) {
+                                z3 = menu3(available_group[selected_group - 1]);
+                                switch(z3) {
+                                    case 7:
+                                        sendCode(sock, INVITE_MEMBER_REQUEST);
+                                        printf("==================== Available Members ====================\n");
+                                        readWithCheck(sock, buffer, 1000);
+                                        if (atoi(buffer) != NOT_OWNER_OF_GROUP) {
+                                            char available_members[20][50] = {'\0','\0','\0','\0','\0','\0','\0','\0','\0'};
+                                            int number_of_available_members = printAvailableElements(buffer, available_members);
+                                            if (number_of_available_members > 0) {
+                                                int selected_member;
+                                                printf("Which member do you want to invite? (1-%d): ", number_of_available_members);
+                                                printf("Or enter 0 to back: ");
+                                                scanf("%d", &selected_member);
+                                                while (selected_member > number_of_available_members) {
+                                                    printf("Member you choose doesn't exist! Pleasy try again!\n");
+                                                    printf("Which member do you want to invite? (1-%d): ", number_of_available_members);
+                                                    printf("Or enter 0 to back: ");
+                                                    scanf("%d", &selected_member);
+                                                }
+                                                if (selected_member == 0) {
+                                                    sendCode(sock, NO_INVITE);
+                                                    break;
+                                                }
+                                                sendWithCheck(sock, available_members[selected_member - 1], strlen(available_members[selected_member-1]) + 1, 0);
+                                                readWithCheck(sock, buffer, 1000);
+                                                if (atoi(buffer) == INVITE_SUCCESS) {
+                                                    printf("Invite successfully!\n");
+                                                } else if (atoi(buffer) == HAS_BEEN_INVITED) {
+                                                    printf("This member has been invited!\n");
+                                                } else if (atoi(buffer) == ALREADY_REQUESTED_TO_JOIN) {
+                                                    printf("This member has already requested to join this group!\n");
+                                                } else {
+                                                    printf("Something wrong!\n");
+                                                }
+                                            }
+                                            else {
+                                                printf("This group already has all member!\n");
+                                                sendCode(sock, NO_MEMBER_TO_INVITE);
+                                            }
+                                        }
+                                        else {
+                                            printf("--->Only leader of group can do this<---\n");
+                                        }
+                                        break;
+                                    case 6:
+                                        sendCode(sock, APPROVE_REQUEST);
+                                        printf("==================== Available Requests ====================\n");
+                                        readWithCheck(sock, buffer, 1000);
+                                        if (atoi(buffer) != NOT_OWNER_OF_GROUP) {
+                                            char available_requests[20][50] = {'\0','\0','\0','\0','\0','\0','\0','\0','\0'};
+                                            int number_of_available_requests = printAvailableElements(buffer, available_requests);
+                                            if(number_of_available_requests > 0){
+                                                int selected_request;
+                                                printf("Which request do you want to approve? (1-%d): \n", number_of_available_requests);
+                                                printf("Or enter 0 to back: ");
+                                                scanf("%d", &selected_request);
+                                                while (selected_request > number_of_available_requests) {
+                                                    printf("Member you choose doesn't exist! Pleasy try again!\n");
+                                                    printf("Which member do you want to invite? (1-%d): ", number_of_available_requests);
+                                                    printf("Or enter 0 to back: ");
+                                                    scanf("%d", &selected_request);
+                                                }
+                                                if (selected_request == 0) {
+                                                    sendCode(sock, NO_REQUEST_WERE_ACCEPTED);
+                                                    break;
+                                                }
+                                                sendWithCheck(sock, available_requests[selected_request-1] , strlen(available_requests[selected_request-1]) + 1 , 0 );
+                                                readWithCheck(sock, buffer, 1000);
+                                                if(atoi(buffer) == APPROVE_SUCCESS) {
+                                                    printf("Approve successfully\n");
+                                                }
+                                                else {
+                                                    printf("Something wrong!!!\n");
+                                                }
+                                            }
+                                            else {
+                                                printf("This group does not have any requests\n");
+                                                sendCode(sock, NO_REQUEST_TO_APPROVE);
+                                            }
+                                        }
+                                        else {
+                                            printf("--->Only leader of group can do this<---\n");
+                                        }
+                                        break;
+                                    case 11:
+                                        sendCode(sock, BACK_REQUEST);
+                                        z3 = 11;
+                                        break;
+                                }
                             }
                             break;
                         case 5:
