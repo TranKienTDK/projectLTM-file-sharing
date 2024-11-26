@@ -15,6 +15,7 @@
 #include "linked_list.h"
 #include <time.h>
 #include <pthread.h>
+#include <asm-generic/socket.h>
 
 #define BUFF_SIZE 100
 singleList users, groups, requests, files;
@@ -417,6 +418,21 @@ void writeToGroupFile(singleList groups){
 	fclose(fp);
 }
 
+void convertGroupsInviteToString(singleList requests, char str[1000]){
+	str[0] = '\0';
+	requests.cur = requests.root;
+	while(requests.cur != NULL)
+  	{
+		strcat(str, ((request_struct*)requests.cur->element)->group_name);
+		if(requests.cur->next == NULL){
+			str[strlen(str)] = '\0';
+		}else{
+			strcat(str, "+");
+		}
+		requests.cur = requests.cur->next;
+  	}
+}
+
 int addGroupToJoinedGroups(singleList users, char username[50], char group_name[50]) {
     users.cur = users.root;
 	while(users.cur != NULL)
@@ -557,6 +573,23 @@ singleList getRequests(singleList requests,char current_group[50]) {
 		requests.cur = requests.cur->next;
 	}
 	return requests_of_group;
+}
+
+singleList getInvites(singleList requests,char user_name[50]){
+	singleList invites_of_user;
+	createSingleList(&invites_of_user);
+	requests.cur = requests.root;
+	while(requests.cur != NULL){
+		if(strcmp(((request_struct*)requests.cur->element)->user_name, user_name) == 0 && ((request_struct*)requests.cur->element)->request_from_user == 0){
+			request_struct *request_element = (request_struct*) malloc(sizeof(request_struct));
+			strcpy(request_element->group_name, ((request_struct*)requests.cur->element)->group_name);
+			strcpy(request_element->user_name, ((request_struct*)requests.cur->element)->user_name);
+			request_element->request_from_user = ((request_struct*)requests.cur->element)->request_from_user;
+			insertEnd(&invites_of_user, request_element);
+		}
+		requests.cur = requests.cur->next;
+	}
+	return invites_of_user;
 }
 
 void convertSimpleGroupsToString(singleList simple_group, char str[1000]) {
@@ -994,10 +1027,10 @@ void * handleThread(void *my_sock) {
 											
 											case INVITE_MEMBER_REQUEST:
 												printf("INVITE_MEMBER_REQUEST\n");
-												if (isOwnerOfGroup(groups, current_group, loginUser->user_name) == 0) {
-													sendCode(new_socket, NOT_OWNER_OF_GROUP);
-												}
-												else {
+												// if (isOwnerOfGroup(groups, current_group, loginUser->user_name) == 0) {
+												// 	sendCode(new_socket, NOT_OWNER_OF_GROUP);
+												// }
+												// else {
 													singleList unjoined_members;
 													createSingleList(&unjoined_members);
 													unjoined_members = unJoinedMembers(users, current_group);
@@ -1007,8 +1040,7 @@ void * handleThread(void *my_sock) {
 													if (atoi(buff) != NO_MEMBER_TO_INVITE && atoi(buff) != NO_INVITE) {
 														printf("group = %s, member = %s\n", current_group, buff);
 														//update request to join group
-														int tmp = updateRequest(&requests, current_group, buff, 0);
-														if (tmp == 1) {
+															int tmp = updateRequest(&requests, current_group, buff, 1);														if (tmp == 1) {
 															printf("Update request successfully\n");
 															sendCode(new_socket , INVITE_SUCCESS);
 															writeToRequestFile(requests);
@@ -1026,7 +1058,7 @@ void * handleThread(void *my_sock) {
 													} else if (atoi(buff) == NO_INVITE) {
 														printf("No invite.\n");
 													}
-												}
+												//}
 												break;
 											
 											case APPROVE_REQUEST:
@@ -1072,7 +1104,30 @@ void * handleThread(void *my_sock) {
 									}
 								}
 								break;
+							case NOTIFICATION_REQUEST: 
+								printf("NOTIFICATION_REQUEST\n");
+								singleList request_list;
+								createSingleList(&request_list);
+								request_list = getInvites(requests, loginUser->user_name);
+								convertGroupsInviteToString(request_list, str);
+								sendWithCheck(new_socket, str, strlen(str)+1, 0);
 
+								readWithCheck(new_socket, buff, 100);
+								if (atoi(buff) != NO_ACCEPT_INVITE && atoi(buff) != NO_INVITE) {
+									printf("group = %s\n", buff);
+									//delete request
+									deleteRequest(&requests, buff, loginUser->user_name, 0);
+									writeToRequestFile(requests);
+									if (addMember(groups, buff, loginUser->user_name) + addGroupToJoinedGroups(users, loginUser->user_name, buff) == 2) {
+										sendCode(new_socket, ACCEPT_SUCCESS);
+										saveUsers(users);
+										writeToGroupFile(groups);
+									}
+									else {
+										sendWithCheck(new_socket , "something went wrong", 21, 0 );
+									}
+								}
+								break;
                             case LOGOUT_REQUEST:
                                 printf("LOGOUT_REQUEST\n");
                                 loginUser = NULL;
