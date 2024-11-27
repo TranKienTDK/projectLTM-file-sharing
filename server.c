@@ -1073,6 +1073,7 @@ void * handleThread(void *my_sock) {
 													convertUserRequestsToString(request_list, str);
 
 													sendWithCheck(new_socket, str, strlen(str) + 1, 0);
+													printf("Ban tin: %s\n", str);
 													readWithCheck(new_socket, buff, 100);
 													if (atoi(buff) != NO_REQUEST_TO_APPROVE && atoi(buff) != NO_REQUEST_WERE_ACCEPTED) {
 														printf("group = %s, member = %s\n", current_group, buff);
