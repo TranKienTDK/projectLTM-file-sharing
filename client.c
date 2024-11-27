@@ -425,7 +425,7 @@ void navigation(int sock) {
                                         sendCode(sock, INVITE_MEMBER_REQUEST);
                                         printf("==================== Available Members ====================\n");
                                         readWithCheck(sock, buffer, 1000);
-                                        if (atoi(buffer) != NOT_OWNER_OF_GROUP) {
+                                        //if (atoi(buffer) != NOT_OWNER_OF_GROUP) {
                                             char available_members[20][50] = {'\0','\0','\0','\0','\0','\0','\0','\0','\0'};
                                             int number_of_available_members = printAvailableElements(buffer, available_members);
                                             if (number_of_available_members > 0) {
@@ -459,10 +459,10 @@ void navigation(int sock) {
                                                 printf("This group already has all member!\n");
                                                 sendCode(sock, NO_MEMBER_TO_INVITE);
                                             }
-                                        }
-                                        else {
-                                            printf("--->Only leader of group can do this<---\n");
-                                        }
+                                        //}
+                                        // else {
+                                        //     printf("--->Only leader of group can do this<---\n");
+                                        // }
                                         break;
                                     case 6:
                                         sendCode(sock, APPROVE_REQUEST);
@@ -509,6 +509,39 @@ void navigation(int sock) {
                                         z3 = 11;
                                         break;
                                 }
+                            }
+                            break;
+                        case 4:
+                            sendCode(sock, NOTIFICATION_REQUEST);
+                            readWithCheck(sock, buffer, 1000);
+                            printf("====================== Notifications ======================\n");
+                            char available_notifications[20][50] = {'\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0'};
+                            int number_of_available_notifications = printAvailableElements(buffer, available_notifications);
+                            if (number_of_available_notifications > 0)
+                            {
+                                int selected_notification;
+                                printf("Which group request do you want to accept? (1-%d): Or 0 to back ", number_of_available_notifications);
+                                scanf("%d", &selected_notification);
+                                if (selected_notification == 0)
+                                {
+                                    sendCode(sock, NO_ACCEPT_INVITE);
+                                    break;
+                                }
+                                sendWithCheck(sock, available_notifications[selected_notification - 1], strlen(available_notifications[selected_notification - 1]) + 1, 0);
+                                readWithCheck(sock, buffer, 1000);
+                                if (atoi(buffer) == ACCEPT_SUCCESS)
+                                {
+                                    printf("Accept successfully\n");
+                                }
+                                else
+                                {
+                                    printf("Something wrong!!!\n");
+                                }
+                            }
+                            else
+                            {
+                                printf("You have no notifications\n");
+                                sendCode(sock, NO_INVITE);
                             }
                             break;
                         case 5:
