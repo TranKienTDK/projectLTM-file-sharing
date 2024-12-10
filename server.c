@@ -17,15 +17,15 @@
 #include <pthread.h>
 #include <asm-generic/socket.h>
 
-#define BUFF_SIZE 100
+#define BUFF_SIZE 256
 singleList users, groups, requests, files;
 
 // Define function
 void sendWithCheck(int sock, char buff[BUFF_SIZE], int length, int option);
 int readWithCheck(int sock, char buff[BUFF_SIZE], int length);
 void sendCode(int sock, int code);
-void signUp(int sock, singleList *users);
-int signIn(int sock, singleList users, user_struct **loginUser);
+void signUp(int sock, singleList *users, char *data);
+int signIn(int sock, singleList users, user_struct **loginUser, char *data);
 int updateRequest(singleList *requests, char group_name[50], char owner[50], int request_from_user);
 int checkRequestExit(singleList requests, char group_name[50], char owner[50], int request_from_user);
 void readUserFile(singleList *users);
@@ -35,7 +35,7 @@ void readFileFile(singleList *files);
 void writeToGroupFile(singleList groups);
 int checkExistence(int type, singleList list, char string[50]);
 void* findByName(int type, singleList list, char string[50]);
-int createGroup(int sock, singleList * groups, user_struct *loginUser);
+int createGroup(int sock, singleList * groups, user_struct *loginUser, char *data);
 int addGroupToJoinedGroups(singleList users, char username[50], char group_name[50]);
 int isOwnerOfGroup(singleList groups, char group_name[], char username[]);
 int addMember(singleList groups, char group_name[50], char username[50]);
@@ -52,7 +52,7 @@ void sendWithCheck(int sock, char buff[BUFF_SIZE], int length, int option) {
 	int sendByte = 0;
 	sendByte = send(sock, buff, length, option);
 	if(sendByte > 0){
-		
+		printf("%s\n", buff);
 	}
     else {
 		close(sock);
@@ -76,8 +76,7 @@ int readWithCheck(int sock, char buff[BUFF_SIZE], int length) {
 
 void sendCode(int sock, int code){
 	char codeStr[10];
-	sprintf(codeStr, "%d", code);
-	printf("-->Response: %s\n", codeStr);
+	sprintf(codeStr, "%d ", code);
 	sendWithCheck(sock , codeStr , strlen(codeStr) + 1 , 0); 
 }
 
@@ -729,21 +728,10 @@ int main(int argc, char *argv[]) {
 }
 
 // SIGN UP SERVER
-void signUp(int sock, singleList *users) {
-    char buff[BUFF_SIZE];
-    int size;
+void signUp(int sock, singleList *users, char *data) {
     char username[50], password[50];
     singleList groups;
-
-    sendCode(sock, REGISTER_REQUEST);
-
-    // Nhận cả username và password trong một lần
-    size = readWithCheck(sock, buff, BUFF_SIZE - 1);
-    buff[size] = '\0'; // Đảm bảo chuỗi kết thúc
-    printf("%s %ld\n", buff, strlen(buff));
-
-    // Kiểm tra định dạng trước khi tách
-    char *separator = strchr(buff, '|');
+    char *separator = strchr(data, '|');
     if (separator == NULL) {
         printf("Invalid input format. Expected format: username|password\n");
         sendCode(sock, INVALID_FORMAT);
@@ -751,13 +739,13 @@ void signUp(int sock, singleList *users) {
     }
 
     // Tách username
-    size_t username_len = separator - buff;
+    size_t username_len = separator - data;
     if (username_len >= sizeof(username)) {
         printf("Username too long!\n");
         sendCode(sock, INVALID_FORMAT);
         return;
     }
-    strncpy(username, buff, username_len);
+    strncpy(username, data, username_len);
     username[username_len] = '\0'; // Đảm bảo chuỗi kết thúc
 
     // Tách password
@@ -793,55 +781,14 @@ void signUp(int sock, singleList *users) {
     }
 }
 
-// // SIGN IN SERVER
-// int signIn(int sock, singleList users, user_struct **loginUser) {
-//     char username[50], password[50], buff[BUFF_SIZE];
-
-//     sendCode(sock, LOGIN_REQUEST);
-
-//     // Nhận cả username và password trong một lần
-//     readWithCheck(sock, buff, BUFF_SIZE);
-//     buff[strlen(buff)] = '\0'; // Đảm bảo chuỗi được kết thúc đúng
-
-//     // Phân tách username và password từ buff
-//     sscanf(buff, "%[^|]|%s", username, password); // Giả sử định dạng "username|password"
-//     username[strlen(username)] = '\0';
-//     password[strlen(password)] = '\0';
-
-//     printf("Received username: '%s', password: '%s' \n", username, password);
-
-//     // Kiểm tra sự tồn tại của username
-//     if (checkExistence(1, users, username) == 0) {
-//         sendCode(sock, NON_EXISTENCE_USERNAME);
-//         return 0;
-//     }
-
-//     // Tìm user trong danh sách
-//     *loginUser = (user_struct *)(findByName(1, users, username));
-//     if (strcmp((*loginUser)->password, password) == 0) {
-//         sendCode(sock, LOGIN_SUCCESS);
-//         return 1;
-//     }
-
-//     // Nếu password không khớp
-//     sendCode(sock, INCORRECT_PASSWORD);
-//     return 0;
-// }
 
 // SIGNIN SERVER
-int signIn(int sock, singleList users, user_struct **loginUser) {
+int signIn(int sock, singleList users, user_struct **loginUser, char *data) {
     char buff[BUFF_SIZE];
     char username[50], password[50];
 
-    sendCode(sock, LOGIN_REQUEST);
-
-    // Nhận cả username và password trong một lần
-    int size = readWithCheck(sock, buff, BUFF_SIZE - 1);
-    buff[size] = '\0'; // Đảm bảo chuỗi kết thúc
-    printf("Received raw input: '%s'\n", buff);
-
     // Tìm dấu phân tách '|'
-    char *separator = strchr(buff, '|');
+    char *separator = strchr(data, '|');
     if (separator == NULL) {
         printf("Invalid input format. Expected format: username|password\n");
         sendCode(sock, INVALID_FORMAT);
@@ -849,14 +796,14 @@ int signIn(int sock, singleList users, user_struct **loginUser) {
     }
 
     // Tách username
-    size_t username_len = separator - buff;
+    size_t username_len = separator - data;
     if (username_len >= sizeof(username)) {
         printf("Username too long!\n");
         sendCode(sock, INVALID_FORMAT);
         return 0;
     }
-    strncpy(username, buff, username_len);
-    username[username_len] = '\0'; // Đảm bảo chuỗi kết thúc
+    strncpy(username, data, username_len);
+    username[username_len] = '\0';
 
     // Tách password
     char *password_start = separator + 1;
@@ -867,38 +814,27 @@ int signIn(int sock, singleList users, user_struct **loginUser) {
         return 0;
     }
     strncpy(password, password_start, password_len);
-    password[password_len] = '\0'; // Đảm bảo chuỗi kết thúc
+    password[password_len] = '\0';
 
     printf("Extracted username: '%s', password: '%s'\n", username, password);
-
-    // Kiểm tra sự tồn tại của username
     if (checkExistence(1, users, username) == 0) {
         sendCode(sock, NON_EXISTENCE_USERNAME);
         return 0;
     }
-
-    // Tìm user trong danh sách
     *loginUser = (user_struct *)(findByName(1, users, username));
     if (strcmp((*loginUser)->password, password) == 0) {
         sendCode(sock, LOGIN_SUCCESS);
         return 1;
     }
-
-    // Nếu password không khớp
     sendCode(sock, INCORRECT_PASSWORD);
     return 0;
 }
 
 // CREATE GROUP SERVER
-int createGroup(int sock, singleList * groups, user_struct *loginUser) {
-    char buff[100], noti[100], cmd[100];
+int createGroup(int sock, singleList * groups, user_struct *loginUser, char *data) {
+    char noti[100], cmd[100];
     int result;
-    sendCode(sock, CREATE_GROUP_REQUEST);
-    readWithCheck(sock, buff, 100);
-
-    if (checkExistence(2, *groups, buff) == 1) {
-        // strcpy(noti, "Group name you typed has been used.");
-        // sendWithCheck(sock, noti, strlen(noti) + 1, 0);
+    if (checkExistence(2, *groups, data) == 1) {
         printf("EXISTENCE_GROUP_NAME\n");
         sendCode(sock, EXISTENCE_GROUP_NAME);
         result = 0;
@@ -911,7 +847,7 @@ int createGroup(int sock, singleList * groups, user_struct *loginUser) {
         createSingleList(&members);
         createSingleList(&files);
 
-        strcpy(group_element->group_name, buff);
+        strcpy(group_element->group_name, data);
 		strcpy(group_element->owner, loginUser->user_name);
 		printf("Ownner of group: %s\n", group_element->owner);
 		group_element->files = files;
@@ -925,13 +861,11 @@ int createGroup(int sock, singleList * groups, user_struct *loginUser) {
 
         strcpy(cmd, "mkdir ");
 		strcat(cmd, "./files/\'");
-		strcat(cmd, buff);
+		strcat(cmd, data);
 		strcat(cmd, "\'");
 		system(cmd);
 
-        // strcpy(noti, "Create group successfully.\n");
-		// sendWithCheck(sock, noti, strlen(noti) + 1, 0);
-        printf("CREATE_GROUP_SUCCESS\n");
+        printf("CREATE_GROUP_SUCCESS %s\n",data);
         sendCode(sock, CREATE_GROUP_SUCCESS);
         result = 1;
         return result;
@@ -941,128 +875,138 @@ int createGroup(int sock, singleList * groups, user_struct *loginUser) {
 void * handleThread(void *my_sock) {
     int new_socket = *((int *)my_sock);
 	int REQUEST;
+	char* request_code;
+	char* data;
 	char buff[BUFF_SIZE];
 	user_struct *loginUser = NULL;
+	char respone[BUFF_SIZE];
 
     while(1) {
-        readWithCheck(new_socket, buff, 100);
-        REQUEST = atoi(buff);
+        memset(buff, 0, sizeof(buff)); 
+		readWithCheck(new_socket, buff, BUFF_SIZE);
+		printf("%s\n",buff);
+		request_code = strtok(buff, " ");
+        REQUEST = atoi(request_code);		
+		data = strtok(NULL, " ");
         switch(REQUEST) {
             case REGISTER_REQUEST:
             printf("REGISTER_REQUEST\n");
-                signUp(new_socket, &users);
+                signUp(new_socket, &users, data);
                 saveUsers(users);
                 break;
             case LOGIN_REQUEST:
                 printf("LOGIN_REQUEST\n");
-                if(signIn(new_socket, users, &loginUser) == 1) {
+                if(signIn(new_socket, users, &loginUser, data) == 1) {
                     while(REQUEST != LOGOUT_REQUEST) {
-                        readWithCheck(new_socket, buff, BUFF_SIZE);
-                        REQUEST = atoi(buff);
+                        memset(buff, 0, sizeof(buff));
+						readWithCheck(new_socket, buff, BUFF_SIZE);
+						printf("%s\n",buff);
+                        request_code = strtok(buff, " ");
+        				REQUEST = atoi(request_code);
+						data = strtok(NULL, " ");
                         switch(REQUEST) {
                             case CREATE_GROUP_REQUEST: 
                                 printf("CREATE_GROUP_REQUEST\n");
-
-                                int result = createGroup(new_socket, &groups, loginUser);
+                                int result = createGroup(new_socket, &groups, loginUser, data);
                                 if (result == 1) {
                                     writeToGroupFile(groups);
                                     saveUsers(users);
                                 }
                                 break;
-                            
-                            case JOIN_GROUP_REQUEST:
-                                printf("JOIN_GROUP_REQUEST\n");
-                                singleList un_joined_group;
+                            case VIEW_GROUP_NO_JOIN:
+								printf("VIEW_GROUP_NO_JOIN\n");
+								singleList un_joined_group;
                                 createSingleList(&un_joined_group);
                                 un_joined_group = unJoinedGroups(groups, users, loginUser->user_name);
                                 char str[200];
                                 convertSimpleGroupsToString(un_joined_group, str);
-                                sendWithCheck(new_socket, str, strlen(str) + 1, 0);
-                                readWithCheck(new_socket, buff, 100);
-
-                                if (atoi(buff) != NO_GROUP_TO_JOIN) {
-                                    printf("You choosed group: %s\n", buff);
-
-                                    int tmp = updateRequest(&requests, buff, loginUser->user_name, 1);
+								if(strlen(str) == 0){
+									sendCode(new_socket, NO_GROUP_TO_JOIN);
+									break;
+								}
+								snprintf(respone, sizeof(respone), "%d %s", VIEW_GROUP_NO_JOIN, str);
+								sendWithCheck(new_socket, respone, strlen(respone) + 1, 0);
+								break;
+                            case JOIN_GROUP_REQUEST:
+                                printf("JOIN_GROUP_REQUEST\n");                              
+                                    printf("You choosed group: %s\n", data);
+                                    int tmp = updateRequest(&requests, data, loginUser->user_name, 1);
                                     if (tmp == 1) {
 										printf("Update request successfully\n");
-                                        printf("REQUESTED_TO_JOIN\n");
 										sendCode(new_socket , REQUESTED_TO_JOIN);
 										writeToRequestFile(requests);
 									} else if (tmp == 0) {
 										printf("Request already exist\n");
-                                        printf("ALREADY_REQUEST_TO_JOIN\n");
 										sendCode(new_socket , ALREADY_REQUESTED_TO_JOIN);
 									} else if (tmp == -1) {
 										printf("User has been invited to the group\n");
-                                        printf("HAS_BEEN_INVITED\n");
 										sendCode(new_socket , HAS_BEEN_INVITED);
 									}
-                                    else {
-                                        printf("No group to join!\n");
-                                    }
-                                    break;
-                                }
-							
-							case ACCESS_GROUP_REQUEST:
-								printf("ACCESS_GROUP_REQUEST\n");
+                                    break;                               
+							case VIEW_GROUP_JOINED:
+								printf("VIEW_GROUP_JOINED\n");	
 								singleList joined_group;
 								createSingleList(&joined_group);
 								joined_group = joinedGroups(users, loginUser->user_name);
-								convertSimpleGroupsToString(joined_group, str);
-								sendWithCheck(new_socket, str, strlen(str) + 1, 0);
-								readWithCheck(new_socket, buff, 100);
-								if (atoi(buff) != NO_GROUP_TO_ACCESS) {
-									printf("Group has choosed: %s\n", buff);
+								char joined_str[200];
+								convertSimpleGroupsToString(joined_group, joined_str);
+								if(strlen(joined_str) == 0){
+									sendCode(new_socket, NO_GROUP_TO_ACCESS);
+									break;
+								}
+								snprintf(respone, sizeof(respone), "%d %s", VIEW_GROUP_JOINED, joined_str);
+								sendWithCheck(new_socket, respone, strlen(respone) + 1, 0);				
+								break;
+							case ACCESS_GROUP_REQUEST:
+								printf("ACCESS_GROUP_REQUEST\n");							
+								if (REQUEST != NO_GROUP_TO_ACCESS) {
+									printf("Group has choosed: %s\n", data);
 									char current_group[50];
-									strcpy(current_group, buff);
-									sendCode(new_socket, ACCESS_GROUP_SUCCESS);
+									strcpy(current_group, data);
+									sendCode(new_socket, ACCESS_GROUP_SUCCESS);						
 									while (REQUEST != BACK_REQUEST) {
-										readWithCheck(new_socket, buff, 100);
-										REQUEST = atoi(buff);
+										memset(buff, 0, sizeof(buff));
+										readWithCheck(new_socket, buff, BUFF_SIZE);
+										printf("%s\n",buff);
+                        				request_code = strtok(buff, " ");
+        								REQUEST = atoi(request_code);
+										data = strtok(NULL, " ");
 
 										switch(REQUEST) {
-											case UPLOAD_REQUEST: 
-												/* code */
-											
-											case INVITE_MEMBER_REQUEST:
-												printf("INVITE_MEMBER_REQUEST\n");
-												// if (isOwnerOfGroup(groups, current_group, loginUser->user_name) == 0) {
-												// 	sendCode(new_socket, NOT_OWNER_OF_GROUP);
-												// }
-												// else {
+											case VIEW_USER_NOT_IN_GROUP:
+											printf("VIEW_USER_NOT_IN_GROUP\n");
 													singleList unjoined_members;
 													createSingleList(&unjoined_members);
 													unjoined_members = unJoinedMembers(users, current_group);
 													convertSimpleGroupsToString(unjoined_members, str);
-													sendWithCheck(new_socket, str, strlen(str) + 1, 0);
-													readWithCheck(new_socket, buff, 100);
-													if (atoi(buff) != NO_MEMBER_TO_INVITE && atoi(buff) != NO_INVITE) {
-														printf("group = %s, member = %s\n", current_group, buff);
-														//update request to join group
-															int tmp = updateRequest(&requests, current_group, buff, 1);														if (tmp == 1) {
-															printf("Update request successfully\n");
-															sendCode(new_socket , INVITE_SUCCESS);
-															writeToRequestFile(requests);
-														}
-														else if (tmp == 0) {
-															printf("Request already exist\n");
-															sendCode(new_socket , HAS_BEEN_INVITED);
-														}
-														else if (tmp == -1) {
-															printf("User has requested to join this group\n");
-															sendCode(new_socket , ALREADY_REQUESTED_TO_JOIN);
-														}
-													} else if (atoi(buff) == NO_MEMBER_TO_INVITE) {
-														printf("No member to invite.\n");
-													} else if (atoi(buff) == NO_INVITE) {
-														printf("No invite.\n");
+													if(strlen(str)==0){
+														sendCode(new_socket, NO_MEMBER_TO_INVITE);
+														break;
 													}
-												//}
+													snprintf(respone, sizeof(respone), "%d %s", VIEW_USER_NOT_IN_GROUP, str);
+													sendWithCheck(new_socket, respone, strlen(respone) + 1, 0);
+												break;										
+											case INVITE_MEMBER_REQUEST:
+												printf("INVITE_MEMBER_REQUEST\n");
+												printf("group = %s, member = %s\n", current_group, data);
+												int tmp = updateRequest(&requests, current_group, data, 1);														if (tmp == 1) {
+												printf("Update request successfully\n");
+												sendCode(new_socket , INVITE_SUCCESS);
+												writeToRequestFile(requests);
+												if (tmp == 0)
+												{
+													printf("Request already exist\n");
+													sendCode(new_socket, HAS_BEEN_INVITED);
+												}
+												else if (tmp == -1)
+												{
+													printf("User has requested to join this group\n");
+													sendCode(new_socket, ALREADY_REQUESTED_TO_JOIN);
+												}
 												break;
-											
-											case APPROVE_REQUEST:
-												printf("APPROVE_REQUEST\n");
+
+											case VIEW_REQUEST_IN_GROUP:
+												printf("VIEW_REQUEST_IN_GROUP\n");
 												if(isOwnerOfGroup(groups, current_group,loginUser->user_name) == 0){
 														sendCode(new_socket, NOT_OWNER_OF_GROUP);
 												}
@@ -1071,28 +1015,26 @@ void * handleThread(void *my_sock) {
 													createSingleList(&request_list);
 													request_list = getRequests(requests, current_group);
 													convertUserRequestsToString(request_list, str);
-
-													sendWithCheck(new_socket, str, strlen(str) + 1, 0);
-													printf("Ban tin: %s\n", str);
-													readWithCheck(new_socket, buff, 100);
-													if (atoi(buff) != NO_REQUEST_TO_APPROVE && atoi(buff) != NO_REQUEST_WERE_ACCEPTED) {
-														printf("group = %s, member = %s\n", current_group, buff);
-														
+													if(strlen(str)==0){
+														sendCode(new_socket, NO_REQUEST_TO_APPROVE);
+														break;
+													}
+													snprintf(respone, sizeof(respone), "%d %s", VIEW_REQUEST_IN_GROUP, str);
+													sendWithCheck(new_socket, respone, strlen(respone) + 1, 0);
+												}
+												break;
+											case APPROVE_REQUEST:												
+														printf("group = %s, member = %s\n", current_group, data);												
 														//delete request
-														deleteRequest(&requests, current_group, buff, 1);
+														deleteRequest(&requests, current_group, data, 1);
 														writeToRequestFile(requests);
 														// checkUser(users);
-														if (addMember(groups, current_group, buff) + addGroupToJoinedGroups(users, buff, current_group) == 2) {
+														if (addMember(groups, current_group, data) + addGroupToJoinedGroups(users, data, current_group) == 2) {
 															sendCode(new_socket, APPROVE_SUCCESS);
 															// checkUser(users);
 															saveUsers(users);
 															writeToGroupFile(groups);
-														}
-														else {
-															sendWithCheck(new_socket , "Something went wrong", 21, 0 );
-														}
-													}
-												}
+														}																								
 												break;
 											
 											case BACK_REQUEST:
@@ -1111,23 +1053,26 @@ void * handleThread(void *my_sock) {
 								createSingleList(&request_list);
 								request_list = getInvites(requests, loginUser->user_name);
 								convertGroupsInviteToString(request_list, str);
-								sendWithCheck(new_socket, str, strlen(str)+1, 0);
-
-								readWithCheck(new_socket, buff, 100);
-								if (atoi(buff) != NO_ACCEPT_INVITE && atoi(buff) != NO_INVITE) {
-									printf("group = %s\n", buff);
+								if(strlen(str) == 0){
+									sendCode(new_socket,NO_INVITE);
+									break;
+								}
+								snprintf(respone, sizeof(respone), "%d %s", NOTIFICATION_REQUEST, str);
+								sendWithCheck(new_socket, respone, strlen(respone)+1, 0);
+							case ACCEPT_INVITE_REQUEST: 
+									printf("group = %s\n", data);
 									//delete request
-									deleteRequest(&requests, buff, loginUser->user_name, 0);
+									deleteRequest(&requests, data, loginUser->user_name, 0);
 									writeToRequestFile(requests);
-									if (addMember(groups, buff, loginUser->user_name) + addGroupToJoinedGroups(users, loginUser->user_name, buff) == 2) {
+									if (addMember(groups, data, loginUser->user_name) + addGroupToJoinedGroups(users, loginUser->user_name, buff) == 2) {
 										sendCode(new_socket, ACCEPT_SUCCESS);
 										saveUsers(users);
 										writeToGroupFile(groups);
 									}
 									else {
-										sendWithCheck(new_socket , "something went wrong", 21, 0 );
+										sendCode(new_socket , NO_ACCEPT_INVITE);
 									}
-								}
+								
 								break;
                             case LOGOUT_REQUEST:
                                 printf("LOGOUT_REQUEST\n");
@@ -1145,5 +1090,8 @@ void * handleThread(void *my_sock) {
                 break;  
         }
     }
+	}
     close(new_socket);
+
+
 }

@@ -6,7 +6,9 @@
 #define JOIN_GROUP_REQUEST 12
 #define ACCESS_GROUP_REQUEST 13
 #define LOGOUT_REQUEST 14
-#define SEARCH_FILE_REQUEST 15
+#define SHOW_GROUP_REQUEST 15
+#define VIEW_GROUP_NO_JOIN 16
+#define VIEW_GROUP_JOINED 17
 
 #define UPLOAD_REQUEST 131
 #define DOWNLOAD_REQUEST 132
@@ -21,6 +23,10 @@
 #define QUIT_GROUP_REQUEST 141
 #define VIEW_USERS_OF_GROUP_REQUEST 142
 #define RENAME_REQUEST 143
+#define ACCEPT_INVITE_REQUEST 144
+#define VIEW_USER_NOT_IN_GROUP 145
+#define VIEW_REQUEST_IN_GROUP 146
+
 
 //==================================================//
 
@@ -39,6 +45,7 @@
 #define INVITE_SUCCESS 811
 #define ACCEPT_SUCCESS 812
 #define QUIT_GROUP_SUCCESS 813
+
 
 //==================================================//
 
@@ -62,5 +69,6 @@
 #define NO_ACCEPT_INVITE 916
 #define IS_OWNER_OF_GROUP 917
 #define NO_FILE_TO_RENAME 918
-#define INVALID_FORMAT 919
+#define JOINED_ALL_GROUP 920
+#define INVALID_FORMAT 999
 //==================================================//
