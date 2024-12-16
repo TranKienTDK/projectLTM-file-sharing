@@ -25,7 +25,8 @@
 #define RENAME_REQUEST 143
 #define ACCEPT_INVITE_REQUEST 144
 #define VIEW_USER_NOT_IN_GROUP 145
-#define VIEW_REQUEST_IN_GROUP 146
+#define VIEW_USER_IN_GROUP 146
+#define VIEW_REQUEST_IN_GROUP 147
 
 
 //==================================================//
@@ -45,6 +46,7 @@
 #define INVITE_SUCCESS 811
 #define ACCEPT_SUCCESS 812
 #define QUIT_GROUP_SUCCESS 813
+#define KICK_MEMBER_SUCCESS 814
 
 
 //==================================================//

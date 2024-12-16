@@ -158,6 +158,18 @@ node * deleteSingleList(singleList * list) {
     while((*list).root != NULL) deleteBegin(list);
 }
 
+int printUser(singleList list) {
+  int i=0;
+  list.cur = list.root;
+	while(list.cur != NULL)
+  {
+    i++;
+    printf("%s\n", ((user_struct*)list.cur->element)->user_name);
+    list.cur = list.cur->next;
+  }
+  return i;
+}
+
 int saveUsers(singleList users){
     singleList groups;
     user_struct* user = NULL;

@@ -39,12 +39,16 @@ int createGroup(int sock, singleList * groups, user_struct *loginUser, char *dat
 int addGroupToJoinedGroups(singleList users, char username[50], char group_name[50]);
 int isOwnerOfGroup(singleList groups, char group_name[], char username[]);
 int addMember(singleList groups, char group_name[50], char username[50]);
+int isUserAMember(singleList users, char group_name[50], char username[50]);
 singleList unJoinedGroups(singleList groups, singleList users, char username[50]);
 singleList joinedGroups(singleList users, char username[50]);
 singleList unJoinedMembers(singleList users, char group_name[50]);
+singleList getAllMembersOfGroup(singleList groups, char group_name[50]);
+void convertSimpleUsersToString(singleList simple_user, char str[1000]);
 void convertSimpleGroupsToString(singleList simple_group, char str[1000]);
 void convertUserRequestsToString(singleList requests, char str[1000]);
 void deleteRequest(singleList *requests, char group_name[50], char user_name[50], int request_from_user);
+void kickMemberOut(singleList groups, singleList users, char group_name[50], char username[50]);
 void * handleThread(void *my_sock);
 
 // Function check send and receive data
@@ -479,6 +483,25 @@ int addMember(singleList groups, char group_name[50], char username[50]){
 	return 0;
 }
 
+int isUserAMember(singleList users, char group_name[50], char username[50]){
+	users.cur = users.root;
+	while(users.cur != NULL){
+		if( strcmp( ((user_struct*)users.cur->element)->user_name, username ) == 0){
+			((user_struct*)users.cur->element)->joined_groups.cur = ((user_struct*)users.cur->element)->joined_groups.root;
+			while (((user_struct*)users.cur->element)->joined_groups.cur != NULL)
+			{
+				if(strcmp(((simple_group_struct*)((user_struct*)users.cur->element)->joined_groups.cur->element)->group_name, group_name) == 0){
+					return 1;
+				}
+				((user_struct*)users.cur->element)->joined_groups.cur = ((user_struct*)users.cur->element)->joined_groups.cur->next;
+			}
+			
+		}
+		users.cur = users.cur->next;
+	}
+	return 0;
+}
+
 singleList unJoinedGroups(singleList groups, singleList users, char username[50]) {
     singleList joined_groups;
 	createSingleList(&joined_groups);
@@ -591,6 +614,36 @@ singleList getInvites(singleList requests,char user_name[50]){
 	return invites_of_user;
 }
 
+singleList getAllMembersOfGroup(singleList groups, char group_name[50]){
+	singleList members;
+	createSingleList(&members);
+	groups.cur = groups.root;
+	while (groups.cur != NULL)
+	{
+		if(strcmp( ((group_struct*)groups.cur->element)->group_name, group_name) == 0){
+			members = ((group_struct*)groups.cur->element)->members;
+			break;
+		}
+		groups.cur = groups.cur->next;
+	}
+	return members;
+}
+
+void convertSimpleUsersToString(singleList simple_user, char str[1000]){
+	str[0] = '\0';
+	simple_user.cur = simple_user.root;
+	while(simple_user.cur != NULL)
+  	{
+		strcat(str, ((simple_user_struct*)simple_user.cur->element)->user_name);
+		if(simple_user.cur->next == NULL){
+			str[strlen(str)] = '\0';
+		}else{
+			strcat(str, "+");
+		}
+    	simple_user.cur = simple_user.cur->next;
+  	}
+}
+
 void convertSimpleGroupsToString(singleList simple_group, char str[1000]) {
     str[0] = '\0';
     simple_group.cur = simple_group.root;
@@ -645,6 +698,71 @@ void deleteRequest(singleList *requests, char group_name[50], char user_name[50]
 		}
 	}
 
+}
+
+void kickMemberOut(singleList groups, singleList users, char group_name[50], char username[50]){
+	
+	//delete user in singleList groups
+	groups.cur = groups.root;
+	while( groups.cur != NULL){
+		if( strcmp( ((group_struct*)groups.cur->element)->group_name, group_name ) == 0){
+			singleList members;
+			createSingleList(&members);
+			members = ((group_struct*)groups.cur->element)->members;
+			if( strcmp(username, ((simple_user_struct*)members.root->element)->user_name) == 0){
+				members.root = members.root->next;
+				((group_struct*)groups.cur->element)->members = members;
+			}else{
+				members.cur = members.prev = members.root;
+				while (members.cur != NULL && strcmp( ((simple_user_struct*)members.cur->element)->user_name, username) != 0)
+				{
+					members.prev = members.cur;
+					members.cur = members.cur->next;
+				}
+				node *newNode = members.cur;
+				members.prev->next = members.cur->next;
+				members.cur = members.prev;
+				free(newNode);
+				((group_struct*)groups.cur->element)->members = members;
+				
+			}
+			break;
+		}
+		groups.cur = groups.cur->next;
+	}
+	//delete group in joined_group
+	users.cur = users.root;
+	while (users.cur != NULL)
+	{
+		if( strcmp(((user_struct*)users.cur->element)->user_name, username) == 0){
+			((user_struct*)users.cur->element)->count_group -= 1;
+			singleList joined_groups;
+			createSingleList(&joined_groups);
+			joined_groups = ((user_struct*)users.cur->element)->joined_groups;
+			if( strcmp(group_name, ((simple_group_struct*)joined_groups.root->element)->group_name) == 0){
+				joined_groups.root = joined_groups.root->next;
+				((user_struct*)users.cur->element)->joined_groups = joined_groups;
+			}else{
+				joined_groups.cur = joined_groups.prev = joined_groups.root;
+				while (joined_groups.cur != NULL && strcmp(group_name, ((simple_group_struct*)joined_groups.cur->element)->group_name) != 0)
+				{
+					joined_groups.prev = joined_groups.cur;
+					joined_groups.cur = joined_groups.cur->next;
+				}
+				node *newNode = joined_groups.cur;
+				joined_groups.prev->next = joined_groups.cur->next;
+				joined_groups.cur = joined_groups.prev;
+				free(newNode);
+				((user_struct*)users.cur->element)->joined_groups = joined_groups;
+			}
+			break;
+		}
+		users.cur = users.cur->next;
+	}
+	
+	writeToGroupFile(groups);
+	// saveFiles(*files);
+	saveUsers(users);
 }
 
 void writeToRequestFile(singleList requests) {
@@ -879,7 +997,7 @@ void * handleThread(void *my_sock) {
 	char* data;
 	char buff[BUFF_SIZE];
 	user_struct *loginUser = NULL;
-	char respone[BUFF_SIZE];
+	char response[BUFF_SIZE];
 
     while(1) {
         memset(buff, 0, sizeof(buff)); 
@@ -924,12 +1042,12 @@ void * handleThread(void *my_sock) {
 									sendCode(new_socket, NO_GROUP_TO_JOIN);
 									break;
 								}
-								snprintf(respone, sizeof(respone), "%d %s", VIEW_GROUP_NO_JOIN, str);
-								sendWithCheck(new_socket, respone, strlen(respone) + 1, 0);
+								snprintf(response, sizeof(response), "%d %s", VIEW_GROUP_NO_JOIN, str);
+								sendWithCheck(new_socket, response, strlen(response) + 1, 0);
 								break;
                             case JOIN_GROUP_REQUEST:
                                 printf("JOIN_GROUP_REQUEST\n");                              
-                                    printf("You choosed group: %s\n", data);
+                                    printf("You choose group: %s\n", data);
                                     int tmp = updateRequest(&requests, data, loginUser->user_name, 1);
                                     if (tmp == 1) {
 										printf("Update request successfully\n");
@@ -954,13 +1072,13 @@ void * handleThread(void *my_sock) {
 									sendCode(new_socket, NO_GROUP_TO_ACCESS);
 									break;
 								}
-								snprintf(respone, sizeof(respone), "%d %s", VIEW_GROUP_JOINED, joined_str);
-								sendWithCheck(new_socket, respone, strlen(respone) + 1, 0);				
+								snprintf(response, sizeof(response), "%d %s", VIEW_GROUP_JOINED, joined_str);
+								sendWithCheck(new_socket, response, strlen(response) + 1, 0);				
 								break;
 							case ACCESS_GROUP_REQUEST:
 								printf("ACCESS_GROUP_REQUEST\n");							
 								if (REQUEST != NO_GROUP_TO_ACCESS) {
-									printf("Group has choosed: %s\n", data);
+									printf("Group has choosen: %s\n", data);
 									char current_group[50];
 									strcpy(current_group, data);
 									sendCode(new_socket, ACCESS_GROUP_SUCCESS);						
@@ -974,32 +1092,57 @@ void * handleThread(void *my_sock) {
 
 										switch(REQUEST) {
 											case VIEW_USER_NOT_IN_GROUP:
-											printf("VIEW_USER_NOT_IN_GROUP\n");
-													singleList unjoined_members;
-													createSingleList(&unjoined_members);
-													unjoined_members = unJoinedMembers(users, current_group);
-													convertSimpleGroupsToString(unjoined_members, str);
-													if(strlen(str)==0){
-														sendCode(new_socket, NO_MEMBER_TO_INVITE);
-														break;
+												printf("VIEW_USER_NOT_IN_GROUP\n");
+												singleList unjoined_members;
+												createSingleList(&unjoined_members);
+												unjoined_members = unJoinedMembers(users, current_group);
+												convertSimpleGroupsToString(unjoined_members, str);
+												if(strlen(str)==0){
+													sendCode(new_socket, NO_MEMBER_TO_INVITE);
+													break;
+												}
+												snprintf(response, sizeof(response), "%d %s", VIEW_USER_NOT_IN_GROUP, str);
+												sendWithCheck(new_socket, response, strlen(response) + 1, 0);
+												break;
+											
+											case VIEW_USER_IN_GROUP:
+												if (isUserAMember(users, current_group, loginUser->user_name) == 1) {
+													printf("VIEW_USER_IN_GROUP\n");
+													if(isOwnerOfGroup(groups, current_group,loginUser->user_name) == 0){
+															sendCode(new_socket, NOT_OWNER_OF_GROUP);
+													} else {
+														singleList members;
+														createSingleList(&members);
+														members = getAllMembersOfGroup(groups, current_group);
+														convertSimpleUsersToString(members, str);
+														if (strlen(str) == 0) {
+															sendCode(new_socket, NO_MEMBER_TO_KICK);
+															break;
+														}
+														snprintf(response, sizeof(response), "%d %s", VIEW_USER_IN_GROUP, str);
+														sendWithCheck(new_socket, response, strlen(response) + 1, 0);
 													}
-													snprintf(respone, sizeof(respone), "%d %s", VIEW_USER_NOT_IN_GROUP, str);
-													sendWithCheck(new_socket, respone, strlen(respone) + 1, 0);
-												break;										
+												} else {
+													printf("You was kicked!\n");
+													sendCode(new_socket, MEMBER_WAS_KICKED);
+													REQUEST = BACK_REQUEST;
+												}
+												break;
+																					
 											case INVITE_MEMBER_REQUEST:
 												printf("INVITE_MEMBER_REQUEST\n");
 												printf("group = %s, member = %s\n", current_group, data);
-												int tmp = updateRequest(&requests, current_group, data, 1);														if (tmp == 1) {
-												printf("Update request successfully\n");
-												sendCode(new_socket , INVITE_SUCCESS);
-												writeToRequestFile(requests);
-												if (tmp == 0)
-												{
+												int tmp = updateRequest(&requests, current_group, data, 1);
+												if (tmp == 1) {
+													printf("Update request successfully\n");
+													sendCode(new_socket , INVITE_SUCCESS);
+													writeToRequestFile(requests);
+												}
+												else if (tmp == 0) {
 													printf("Request already exist\n");
 													sendCode(new_socket, HAS_BEEN_INVITED);
 												}
-												else if (tmp == -1)
-												{
+												else if (tmp == -1) {
 													printf("User has requested to join this group\n");
 													sendCode(new_socket, ALREADY_REQUESTED_TO_JOIN);
 												}
@@ -1019,22 +1162,72 @@ void * handleThread(void *my_sock) {
 														sendCode(new_socket, NO_REQUEST_TO_APPROVE);
 														break;
 													}
-													snprintf(respone, sizeof(respone), "%d %s", VIEW_REQUEST_IN_GROUP, str);
-													sendWithCheck(new_socket, respone, strlen(respone) + 1, 0);
+													snprintf(response, sizeof(response), "%d %s", VIEW_REQUEST_IN_GROUP, str);
+													sendWithCheck(new_socket, response, strlen(response) + 1, 0);
 												}
 												break;
 											case APPROVE_REQUEST:												
-														printf("group = %s, member = %s\n", current_group, data);												
-														//delete request
-														deleteRequest(&requests, current_group, data, 1);
-														writeToRequestFile(requests);
-														// checkUser(users);
-														if (addMember(groups, current_group, data) + addGroupToJoinedGroups(users, data, current_group) == 2) {
-															sendCode(new_socket, APPROVE_SUCCESS);
-															// checkUser(users);
-															saveUsers(users);
-															writeToGroupFile(groups);
-														}																								
+												printf("group = %s, member = %s\n", current_group, data);												
+												//delete request
+												deleteRequest(&requests, current_group, data, 1);
+												writeToRequestFile(requests);
+												if (addMember(groups, current_group, data) + addGroupToJoinedGroups(users, data, current_group) == 2) {
+													sendCode(new_socket, APPROVE_SUCCESS);
+													saveUsers(users);
+													writeToGroupFile(groups);
+												}																								
+												break;
+
+											case KICK_MEMBER_REQUEST:
+												if (isUserAMember(users, current_group, loginUser->user_name) == 1) {
+													printf("KICK_MEMBER_REQUEST\n");
+													if(isOwnerOfGroup(groups, current_group,loginUser->user_name) == 0){
+														sendCode(new_socket, NOT_OWNER_OF_GROUP);
+													} else {
+														printf("group = %s kick member = %s\n", current_group, data);
+														kickMemberOut(groups, users, current_group, data);
+														sendCode(new_socket, KICK_MEMBER_SUCCESS);
+														singleList members1;
+														createSingleList(&members1);
+														members1 = getAllMembersOfGroup(groups, current_group);
+														printUser(members1);
+													}
+												} else {
+													printf("You was kicked!\n");
+													sendCode(new_socket, MEMBER_WAS_KICKED);
+													REQUEST = BACK_REQUEST;
+												}
+												break;
+
+											case VIEW_USERS_OF_GROUP_REQUEST:
+												printf("VIEW_USERS_OF_GROUP_REQUEST\n");
+												if (isUserAMember(users, current_group, loginUser->user_name) == 1) {
+													singleList members;
+													createSingleList(&members);
+													members = getAllMembersOfGroup(groups, current_group);
+													convertSimpleUsersToString(members, str);
+													if(strlen(str)==0){
+														sendCode(new_socket, NO_REQUEST_TO_APPROVE);
+														break;
+													}
+													snprintf(response, sizeof(response), "%d %s", VIEW_USERS_OF_GROUP_REQUEST, str);
+													sendWithCheck(new_socket, response, strlen(response) + 1, 0);
+												} else {
+													printf("You was kicked!\n");
+													sendCode(new_socket, MEMBER_WAS_KICKED);
+													REQUEST = BACK_REQUEST;
+												}
+												break;
+
+											case QUIT_GROUP_REQUEST:
+												printf("QUIT_GROUP_REQUEST\n");
+												if (isOwnerOfGroup(groups, current_group, loginUser->user_name) == 1) {
+													sendCode(new_socket, IS_OWNER_OF_GROUP);
+												} else {
+													kickMemberOut(groups, users, current_group, loginUser->user_name);
+													sendCode(new_socket, QUIT_GROUP_SUCCESS);
+												}
+												// REQUEST = BACK_REQUEST;
 												break;
 											
 											case BACK_REQUEST:
@@ -1057,8 +1250,8 @@ void * handleThread(void *my_sock) {
 									sendCode(new_socket,NO_INVITE);
 									break;
 								}
-								snprintf(respone, sizeof(respone), "%d %s", NOTIFICATION_REQUEST, str);
-								sendWithCheck(new_socket, respone, strlen(respone)+1, 0);
+								snprintf(response, sizeof(response), "%d %s", NOTIFICATION_REQUEST, str);
+								sendWithCheck(new_socket, response, strlen(response)+1, 0);
 							case ACCEPT_INVITE_REQUEST: 
 									printf("group = %s\n", data);
 									//delete request
@@ -1090,8 +1283,6 @@ void * handleThread(void *my_sock) {
                 break;  
         }
     }
-	}
-    close(new_socket);
-
-
+	close(new_socket);
 }
+    

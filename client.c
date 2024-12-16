@@ -326,9 +326,9 @@ void createGroup(int sock) {
 
     readWithCheck(sock, buff, BUFF_SIZE);
     buff[strlen(buff)] = '\0';
-    char *respone_code = strtok(buff, " ");
+    char *response_code = strtok(buff, " ");
 
-    int responseCode = atoi(respone_code);
+    int responseCode = atoi(response_code);
     if (responseCode == EXISTENCE_GROUP_NAME) {
         printf("Group name you typed has been used!\n");
     } else if (responseCode == CREATE_GROUP_SUCCESS) {
@@ -345,9 +345,9 @@ void navigation(int sock) {
     int z1, z2, z3;
     char buffer[100], code[10], username[50], password[50];
     char send[BUFF_SIZE];
-    char* respone_code;
+    char* response_code;
 	char* data;
-    int RESPONE;
+    int RESPONSE;
     z1 = menu1();
 
     switch(z1) {
@@ -366,14 +366,14 @@ void navigation(int sock) {
                             sendCode(sock,VIEW_GROUP_NO_JOIN);
                             memset(buffer, 0, sizeof(buffer)); 
                             readWithCheck(sock, buffer, 1000);
-                            respone_code = strtok(buffer, " ");
-                            RESPONE = atoi(respone_code);	
+                            response_code = strtok(buffer, " ");
+                            RESPONSE = atoi(response_code);	
 		                    data = strtok(NULL, " ");
                             printf("============= Available Group No Join ===============\n");                       
                             char available_group[20][50] = {'\0','\0','\0','\0','\0','\0','\0','\0','\0','\0','\0','\0','\0','\0','\0','\0','\0','\0','\0','\0'};
                             int num_of_available_groups = printAvailableElements(data, available_group);
                             int selected_group;
-                            if ( RESPONE == VIEW_GROUP_NO_JOIN) {
+                            if ( RESPONSE == VIEW_GROUP_NO_JOIN) {
                                 printf("Which group do you want to join? (1-%d): ", num_of_available_groups);
                                 scanf("%d", &selected_group);
                                 while (selected_group < 1 || selected_group > num_of_available_groups) {
@@ -386,14 +386,14 @@ void navigation(int sock) {
                                 sendWithCheck(sock, join_group, strlen(join_group), 0);
                                 memset(buffer, 0, sizeof(buffer));
                                 readWithCheck(sock, buffer, 1000);
-                                respone_code = strtok(buffer, " ");
-                                RESPONE = atoi(respone_code);	
+                                response_code = strtok(buffer, " ");
+                                RESPONSE = atoi(response_code);	
 		                        data = strtok(NULL, " ");
-                                if (RESPONE== REQUESTED_TO_JOIN) {
+                                if (RESPONSE== REQUESTED_TO_JOIN) {
                                     printf("Request to join group successfully!\n");
-                                } else if (RESPONE == ALREADY_REQUESTED_TO_JOIN) {
+                                } else if (RESPONSE == ALREADY_REQUESTED_TO_JOIN) {
                                     printf("You have already requested to join this group!\n");
-                                } else if (RESPONE == HAS_BEEN_INVITED) {
+                                } else if (RESPONSE == HAS_BEEN_INVITED) {
                                     printf("You have been invited to this group!\n");
                                 }
                                 else {
@@ -408,12 +408,12 @@ void navigation(int sock) {
                             sendCode(sock,VIEW_GROUP_JOINED);
                             memset(buffer, 0, sizeof(buffer)); 
                             readWithCheck(sock, buffer, 1000);
-                            respone_code = strtok(buffer, " ");
-                            RESPONE = atoi(respone_code);	
+                            response_code = strtok(buffer, " ");
+                            RESPONSE = atoi(response_code);	
 		                    data = strtok(NULL, " ");
                             printf("==================== Available Group Joined ====================\n");
                             num_of_available_groups = printAvailableElements(data, available_group);
-                            if (RESPONE == VIEW_GROUP_JOINED) {
+                            if (RESPONSE == VIEW_GROUP_JOINED) {
                                 printf("Which group do you want to access? (1-%d): ", num_of_available_groups);
                                 scanf("%d", &selected_group);
                                 while (selected_group < 1 || selected_group > num_of_available_groups) {
@@ -425,10 +425,10 @@ void navigation(int sock) {
                                 sendWithCheck(sock, send, strlen(send), 0);
                                 memset(buffer, 0, sizeof(buffer));
                                 readWithCheck(sock, buffer, 1000);
-                                respone_code = strtok(buffer, " ");
-                                RESPONE = atoi(respone_code);	
+                                response_code = strtok(buffer, " ");
+                                RESPONSE = atoi(response_code);	
 		                        data = strtok(NULL, " ");
-                                if (RESPONE == ACCESS_GROUP_SUCCESS) {
+                                if (RESPONSE == ACCESS_GROUP_SUCCESS) {
                                     printf("=> Access %s successfully!\n", available_group[selected_group - 1]);
                                     z3 = 0;
                                 }
@@ -448,13 +448,13 @@ void navigation(int sock) {
                                         sendCode(sock, VIEW_USER_NOT_IN_GROUP);
                                         memset(buffer, 0, sizeof(buffer)); 
                                         readWithCheck(sock, buffer, 1000);
-                                        respone_code = strtok(buffer, " ");
-                                        RESPONE = atoi(respone_code);	
+                                        response_code = strtok(buffer, " ");
+                                        RESPONSE = atoi(response_code);	
 		                                data = strtok(NULL, " ");
                                         printf("==================== Available Members ====================\n");
                                             char available_members[20][50] = {'\0','\0','\0','\0','\0','\0','\0','\0','\0'};
                                             int number_of_available_members = printAvailableElements(data, available_members);
-                                            if (RESPONE == VIEW_USER_NOT_IN_GROUP) {
+                                            if (RESPONSE == VIEW_USER_NOT_IN_GROUP) {
                                                 int selected_member;
                                                 printf("Which member do you want to invite? (1-%d): ", number_of_available_members);
                                                 printf("Or enter 0 to back: ");
@@ -473,14 +473,14 @@ void navigation(int sock) {
                                                 sendWithCheck(sock, send, strlen(send), 0);
                                                 memset(buffer, 0, sizeof(buffer));
                                                 readWithCheck(sock, buffer, 1000);
-                                                respone_code = strtok(buffer, " ");
-                                                RESPONE = atoi(respone_code);	
+                                                response_code = strtok(buffer, " ");
+                                                RESPONSE = atoi(response_code);	
 		                                        data = strtok(NULL, " ");
-                                                if (RESPONE == INVITE_SUCCESS) {
+                                                if (RESPONSE == INVITE_SUCCESS) {
                                                     printf("Invite successfully!\n");
-                                                } else if (RESPONE == HAS_BEEN_INVITED) {
+                                                } else if (RESPONSE == HAS_BEEN_INVITED) {
                                                     printf("This member has been invited!\n");
-                                                } else if (RESPONE == ALREADY_REQUESTED_TO_JOIN) {
+                                                } else if (RESPONSE == ALREADY_REQUESTED_TO_JOIN) {
                                                     printf("This member has already requested to join this group!\n");
                                                 } else {
                                                     printf("Something wrong!\n");
@@ -494,20 +494,20 @@ void navigation(int sock) {
                                         sendCode(sock, VIEW_REQUEST_IN_GROUP);
                                         memset(buffer, 0, sizeof(buffer)); 
                                         readWithCheck(sock, buffer, 1000);
-                                        respone_code = strtok(buffer, " ");
-                                        RESPONE = atoi(respone_code);	
+                                        response_code = strtok(buffer, " ");
+                                        RESPONSE = atoi(response_code);	
 		                                data = strtok(NULL, " ");
                                         printf("==================== Available Requests ====================\n");
-                                        if (RESPONE != NOT_OWNER_OF_GROUP) {
+                                        if (RESPONSE != NOT_OWNER_OF_GROUP) {
                                             char available_requests[20][50] = {'\0','\0','\0','\0','\0','\0','\0','\0','\0'};
                                             int number_of_available_requests = printAvailableElements(data, available_requests);
-                                            if(RESPONE == VIEW_REQUEST_IN_GROUP){
+                                            if(RESPONSE == VIEW_REQUEST_IN_GROUP){
                                                 int selected_request;
                                                 printf("Which request do you want to approve? (1-%d): \n", number_of_available_requests);
                                                 printf("Or enter 0 to back: ");
                                                 scanf("%d", &selected_request);
                                                 while (selected_request > number_of_available_requests) {
-                                                    printf("Member you choose doesn't exist! Pleasy try again!\n");
+                                                    printf("Member you choose doesn't exist! Please try again!\n");
                                                     printf("Which member do you want to invite? (1-%d): ", number_of_available_requests);
                                                     printf("Or enter 0 to back: ");
                                                     scanf("%d", &selected_request);
@@ -519,10 +519,10 @@ void navigation(int sock) {
                                                 sendWithCheck(sock,send, strlen(send), 0);
                                                 memset(buffer, 0, sizeof(buffer));
                                                 readWithCheck(sock, buffer, 1000);
-                                                respone_code = strtok(buffer, " ");
-                                                RESPONE = atoi(respone_code);	
+                                                response_code = strtok(buffer, " ");
+                                                RESPONSE = atoi(response_code);	
 		                                        data = strtok(NULL, " ");
-                                                if(RESPONE == APPROVE_SUCCESS) {
+                                                if(RESPONSE == APPROVE_SUCCESS) {
                                                     printf("Approve successfully\n");
                                                 }
                                                 else {
@@ -537,6 +537,98 @@ void navigation(int sock) {
                                             printf("--->Only leader of group can do this<---\n");
                                         }
                                         break;
+
+                                    case 8:
+                                        sendCode(sock, VIEW_USER_IN_GROUP);
+                                        memset(buffer, 0, sizeof(buffer)); 
+                                        readWithCheck(sock, buffer, 1000);
+                                        response_code = strtok(buffer, " ");
+                                        RESPONSE = atoi(response_code);	
+		                                data = strtok(NULL, " ");
+                                        if (RESPONSE != MEMBER_WAS_KICKED) {
+                                            printf("====================== All Members =======================\n");
+                                            if (RESPONSE != NOT_OWNER_OF_GROUP) {
+                                                char available_members[20][50] = {'\0','\0','\0','\0','\0','\0','\0','\0','\0','\0','\0','\0','\0','\0','\0','\0','\0','\0','\0','\0'};
+                                                int number_of_available_members = printAvailableElements(data, available_members);
+                                                if (RESPONSE == VIEW_USER_IN_GROUP) {
+                                                    int selected_member;
+                                                    printf("Which member do you want to kick? (1-%d): ", number_of_available_members);
+                                                    printf("Or enter 0 to back: ");
+                                                    scanf("%d", &selected_member);
+                                                    while (selected_member > number_of_available_members) {
+                                                        printf("Member you choose doesn't exist! Please try again!\n");
+                                                        printf("Which member do you want to kick? (1-%d): ", number_of_available_members);
+                                                        printf("Or enter 0 to back: ");
+                                                        scanf("%d", &selected_member);
+                                                    }
+                                                    if (selected_member == 0) {
+                                                        break;
+                                                    }
+                                                    snprintf(send, sizeof(send), "%d %s", KICK_MEMBER_REQUEST, available_members[selected_member - 1]);
+                                                    sendWithCheck(sock, send, sizeof(send), 0);
+                                                    memset(buffer, 0, sizeof(buffer));
+                                                    readWithCheck(sock, buffer, 1000);
+                                                    response_code = strtok(buffer, " ");
+                                                    RESPONSE = atoi(response_code);	
+                                                    data = strtok(NULL, " ");
+                                                    if (RESPONSE == KICK_MEMBER_SUCCESS) {
+                                                        printf("Kick member successfully!\n");
+                                                    } else {
+                                                        printf("Something wrong!\n");
+                                                    }
+                                                } else {
+                                                    printf("This group doesn't have any member to kick!\n");
+                                                }
+                                            } else {
+                                                printf("--->Only leader of group can do this<---\n");
+                                            }
+                                        } else {
+                                            printf("You have been kicked out of this group.\n");
+										    z3 = 11;
+                                        }
+                                        break;
+
+                                    case 9:
+                                        // VIEW ALL USERS
+                                        sendCode(sock, VIEW_USERS_OF_GROUP_REQUEST);
+                                        memset(buffer, 0, sizeof(buffer));
+                                        readWithCheck(sock, buffer, 1000);
+                                        response_code = strtok(buffer, " ");
+                                        RESPONSE = atoi(response_code);	
+		                                data = strtok(NULL, " ");
+                                        printf("====================== All Members In Group =======================\n");
+                                        if (RESPONSE != MEMBER_WAS_KICKED) {
+                                            char available_members[20][50] = {'\0','\0','\0','\0','\0','\0','\0','\0','\0'};
+										    int number_of_available_members = printAvailableElements(data, available_members);
+                                            if (number_of_available_members > 0) {
+
+                                            } else {
+                                                printf("Your group is just you!\n");
+                                            }
+                                        } else {
+                                            printf("You have been kicked out of this group.\n");
+										    z3 = 11;
+                                        }
+                                        break;
+
+                                    case 10:
+                                        // QUIT GROUP
+                                        sendCode(sock, QUIT_GROUP_REQUEST);
+                                        memset(buffer, 0, sizeof(buffer));
+                                        readWithCheck(sock, buffer, 1000);
+                                        response_code = strtok(buffer, " ");
+                                        RESPONSE = atoi(response_code);	
+		                                data = strtok(NULL, " ");
+                                        if (RESPONSE == QUIT_GROUP_SUCCESS) {
+                                            printf("Quit group successfully!\n");
+                                            z3 = 11;
+                                        } else if (RESPONSE == IS_OWNER_OF_GROUP) {
+                                            printf("---> You are the owner of this group <---\n");
+                                        } else {
+                                            printf("Something wrong!\n");
+                                        }
+                                        break; 
+
                                     case 11:
                                         sendCode(sock, BACK_REQUEST);
                                         z3 = 11;
@@ -548,13 +640,13 @@ void navigation(int sock) {
                             sendCode(sock, NOTIFICATION_REQUEST);
                             memset(buffer, 0, sizeof(buffer));
                             readWithCheck(sock, buffer, 1000);
-                            respone_code = strtok(buffer, " ");
-                            RESPONE = atoi(respone_code);	
+                            response_code = strtok(buffer, " ");
+                            RESPONSE = atoi(response_code);	
 		                    data = strtok(NULL, " ");
                             printf("====================== Notifications ======================\n");
                             char available_notifications[20][50] = {'\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0'};
                             int number_of_available_notifications = printAvailableElements(data, available_notifications);
-                            if (RESPONE == NOTIFICATION_REQUEST)
+                            if (RESPONSE == NOTIFICATION_REQUEST)
                             {
                                 int selected_notification;
                                 printf("Which group request do you want to accept? (1-%d): Or 0 to back ", number_of_available_notifications);
@@ -567,10 +659,10 @@ void navigation(int sock) {
                                 sendWithCheck(sock, send, strlen(send), 0);
                                 memset(buffer, 0, sizeof(buffer));
                                 readWithCheck(sock, buffer, 1000);
-                                respone_code = strtok(buffer, " ");
-                                RESPONE = atoi(respone_code);	
+                                response_code = strtok(buffer, " ");
+                                RESPONSE = atoi(response_code);	
 		                        data = strtok(NULL, " ");                              
-                                if (RESPONE == ACCEPT_SUCCESS)
+                                if (RESPONSE == ACCEPT_SUCCESS)
                                 {
                                     printf("Accept successfully\n");
                                 }
