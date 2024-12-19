@@ -573,8 +573,6 @@ void navigation(int sock) {
                                                     data = strtok(NULL, " ");
                                                     if (RESPONSE == KICK_MEMBER_SUCCESS) {
                                                         printf("Kick member successfully!\n");
-                                                    } else {
-                                                        printf("Something wrong!\n");
                                                     }
                                                 } else {
                                                     printf("This group doesn't have any member to kick!\n");
