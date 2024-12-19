@@ -504,40 +504,51 @@ int isUserAMember(singleList users, char group_name[50], char username[50]){
 
 singleList unJoinedGroups(singleList groups, singleList users, char username[50]) {
     singleList joined_groups;
-	createSingleList(&joined_groups);
-	singleList un_joined_groups;
-	createSingleList(&un_joined_groups);
-	users.cur = users.root;
-	while(users.cur != NULL) {
-		if(strcmp(((user_struct*)users.cur->element)->user_name, username) == 0){
-			groups.cur = groups.root;
-			joined_groups = ((user_struct*)users.cur->element)->joined_groups;
-			break;
-		}
-		users.cur = users.cur->next;
-	}
+    createSingleList(&joined_groups);
+    singleList un_joined_groups;
+    createSingleList(&un_joined_groups);
 
-	groups.cur = groups.root;
-	while(groups.cur != NULL) {
-		int check = 0;
-		joined_groups.cur = joined_groups.root;
-		while(joined_groups.cur != NULL)
-		{
-			if( strcmp( ((group_struct*)groups.cur->element)->group_name, ((simple_group_struct*)joined_groups.cur->element)->group_name) == 0) {
-				check = 1;
-				break;
-			}
-			joined_groups.cur = joined_groups.cur->next;
-		}
-		if(check == 0){
-			simple_group_struct *group_element = (simple_group_struct*) malloc(sizeof(simple_group_struct));
-			strcpy(group_element->group_name, ((group_struct*)groups.cur->element)->group_name);
-			insertEnd(&un_joined_groups, group_element);
-		}
-		groups.cur = groups.cur->next;
-	}
-	return un_joined_groups;
+    users.cur = users.root;
+    while (users.cur != NULL) {
+        if (strcmp(((user_struct*)users.cur->element)->user_name, username) == 0) {
+            node *temp = ((user_struct*)users.cur->element)->joined_groups.root;
+            while (temp != NULL) {
+                simple_group_struct *group_element = (simple_group_struct*) malloc(sizeof(simple_group_struct));
+                memset(group_element->group_name, 0, sizeof(group_element->group_name));
+                strcpy(group_element->group_name, ((simple_group_struct*)temp->element)->group_name);
+                insertEnd(&joined_groups, group_element);
+                temp = temp->next;
+            }
+            break;
+        }
+        users.cur = users.cur->next;
+    }
+
+    groups.cur = groups.root;
+    while (groups.cur != NULL) {
+        int check = 0;
+        joined_groups.cur = joined_groups.root;
+        while (joined_groups.cur != NULL) {
+            if (strcmp(((group_struct*)groups.cur->element)->group_name, 
+                       ((simple_group_struct*)joined_groups.cur->element)->group_name) == 0) {
+                check = 1;
+                break;
+            }
+            joined_groups.cur = joined_groups.cur->next;
+        }
+
+        if (check == 0) {
+            simple_group_struct *group_element = (simple_group_struct*) malloc(sizeof(simple_group_struct));
+            memset(group_element->group_name, 0, sizeof(group_element->group_name));
+            strcpy(group_element->group_name, ((group_struct*)groups.cur->element)->group_name);
+            insertEnd(&un_joined_groups, group_element);
+        }
+        groups.cur = groups.cur->next;
+    }
+
+    return un_joined_groups;
 }
+
 
 singleList joinedGroups(singleList users, char username[50]) {
 	singleList joined_groups;
@@ -726,6 +737,7 @@ void kickMemberOut(singleList groups, singleList users, char group_name[50], cha
 				((group_struct*)groups.cur->element)->members = members;
 				
 			}
+			((group_struct*)groups.cur->element)->number_of_members -= 1;
 			break;
 		}
 		groups.cur = groups.cur->next;
@@ -990,6 +1002,18 @@ int createGroup(int sock, singleList * groups, user_struct *loginUser, char *dat
     }
 }
 
+char* getOwnerOfGroup(singleList groups, char group_name[50]) {
+    groups.cur = groups.root; // Bắt đầu duyệt từ gốc danh sách
+    while (groups.cur != NULL) {
+        group_struct* current_group = (group_struct*)groups.cur->element;
+        if (strcmp(current_group->group_name, group_name) == 0) {
+            return current_group->owner; // Trả về tên owner nếu tìm thấy nhóm
+        }
+        groups.cur = groups.cur->next; // Chuyển sang nút tiếp theo
+    }
+    return NULL; // Trả về NULL nếu không tìm thấy nhóm
+}
+
 void * handleThread(void *my_sock) {
     int new_socket = *((int *)my_sock);
 	int REQUEST;
@@ -1201,18 +1225,26 @@ void * handleThread(void *my_sock) {
 
 											case VIEW_USERS_OF_GROUP_REQUEST:
 												printf("VIEW_USERS_OF_GROUP_REQUEST\n");
-												if (isUserAMember(users, current_group, loginUser->user_name) == 1) {
+												if (isUserAMember(users, current_group, loginUser->user_name) == 1)
+												{
 													singleList members;
 													createSingleList(&members);
 													members = getAllMembersOfGroup(groups, current_group);
+													char *owner = getOwnerOfGroup(groups, current_group);
 													convertSimpleUsersToString(members, str);
-													if(strlen(str)==0){
-														sendCode(new_socket, NO_REQUEST_TO_APPROVE);
-														break;
+													if(strlen(str) == 0){
+														strcat(str,owner);
+													}
+													else
+													{
+														strcat(str, "+");
+														strcat(str, owner);
 													}
 													snprintf(response, sizeof(response), "%d %s", VIEW_USERS_OF_GROUP_REQUEST, str);
 													sendWithCheck(new_socket, response, strlen(response) + 1, 0);
-												} else {
+												}
+												else
+												{
 													printf("You was kicked!\n");
 													sendCode(new_socket, MEMBER_WAS_KICKED);
 													REQUEST = BACK_REQUEST;
