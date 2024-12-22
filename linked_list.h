@@ -170,6 +170,25 @@ int printUser(singleList list) {
   return i;
 }
 
+int saveFiles(singleList files){
+  
+  file_struct* file = NULL;
+  files.cur = files.root;
+  FILE *fp = fopen("./storage/file.txt", "w");
+  if(fp == NULL){
+    printf("Khong tim thay file luu tru. Luu file that bai!!\n");
+  }
+
+  while(files.cur != NULL){
+    file = (file_struct*)(files.cur->element);
+    fprintf(fp, "%s\n%s\n%s\n%s\n%d\n", file->name, file->owner, file->group, file->uploaded_at, file->downloaded_times);
+    files.cur = files.cur->next;
+  }
+  fclose(fp);
+  printf("luu file thanh cong.\n");
+
+}
+
 int saveUsers(singleList users){
     singleList groups;
     user_struct* user = NULL;

@@ -21,6 +21,7 @@
 singleList users, groups, requests, files;
 
 // Define function
+singleList getAllFilesOfGroup(singleList groups, char group_name[50]);
 void sendWithCheck(int sock, char buff[BUFF_SIZE], int length, int option);
 int readWithCheck(int sock, char buff[BUFF_SIZE], int length);
 void sendCode(int sock, int code);
@@ -33,6 +34,7 @@ void readGroupFile(singleList *groups);
 void readRequestFile(singleList* requests);
 void readFileFile(singleList *files);
 void writeToGroupFile(singleList groups);
+void convertSimpleFilesToString(singleList simple_file, char str[1000]);
 int checkExistence(int type, singleList list, char string[50]);
 void* findByName(int type, singleList list, char string[50]);
 int createGroup(int sock, singleList * groups, user_struct *loginUser, char *data);
@@ -50,6 +52,7 @@ void convertUserRequestsToString(singleList requests, char str[1000]);
 void deleteRequest(singleList *requests, char group_name[50], char user_name[50], int request_from_user);
 void kickMemberOut(singleList groups, singleList users, char group_name[50], char username[50]);
 void * handleThread(void *my_sock);
+int receiveUploadedFile(int sock, char filePath[100]);
 
 // Function check send and receive data
 void sendWithCheck(int sock, char buff[BUFF_SIZE], int length, int option) {
@@ -185,6 +188,54 @@ int checkRequestExit(singleList requests, char group_name[50], char user_name[50
 		requests.cur = requests.cur->next; 
 	}
 	return 0;
+}
+
+singleList getAllFilesOfGroup(singleList groups, char group_name[50]){
+	singleList files;
+
+	createSingleList(&files);
+	groups.cur = groups.root;
+	while (groups.cur != NULL)
+	{
+		if(strcmp( ((group_struct*)groups.cur->element)->group_name, group_name) == 0){
+			files = ((group_struct*)groups.cur->element)->files;
+			break;
+		}
+		groups.cur = groups.cur->next;
+	}
+	printf("group_name: %s\n", group_name);
+	return files;
+}
+
+singleList getAllMembersOfGroup(singleList groups, char group_name[50]){
+	singleList members;
+	createSingleList(&members);
+	groups.cur = groups.root;
+	while (groups.cur != NULL)
+	{
+		if(strcmp( ((group_struct*)groups.cur->element)->group_name, group_name) == 0){
+			members = ((group_struct*)groups.cur->element)->members;
+			break;
+		}
+		groups.cur = groups.cur->next;
+	}
+	return members;
+}
+
+singleList getFilesOwns(singleList files, char username[50]){
+	singleList files_owns;
+	createSingleList(&files_owns);
+	files.cur = files.root;
+	while (files.cur != NULL)
+	{
+		if(strcmp(  ((file_struct*)files.cur->element)->owner, username) == 0){
+			simple_file_struct *file_element = (simple_file_struct*) malloc(sizeof(simple_file_struct));
+			strcpy(file_element->file_name, ((file_struct*)files.cur->element)->name);
+			insertEnd(&files_owns, file_element);
+		}
+		files.cur = files.cur->next;
+	}
+	return files_owns;
 }
 
 void readUserFile(singleList* users) {
@@ -386,6 +437,21 @@ void readFileFile(singleList *files) {
 		insertEnd(files, file);
 	}
 	fclose(fp);
+}
+
+void convertSimpleFilesToString(singleList simple_file, char str[1000]){
+	str[0] = '\0';
+	simple_file.cur = simple_file.root;
+	while(simple_file.cur != NULL)
+  	{
+		strcat(str, ((simple_file_struct*)simple_file.cur->element)->file_name);
+		if(simple_file.cur->next == NULL){
+			str[strlen(str)] = '\0';
+		}else{
+			strcat(str, "+");
+		}
+    	simple_file.cur = simple_file.cur->next;
+  	}
 }
 
 void writeToGroupFile(singleList groups){
@@ -625,20 +691,20 @@ singleList getInvites(singleList requests,char user_name[50]){
 	return invites_of_user;
 }
 
-singleList getAllMembersOfGroup(singleList groups, char group_name[50]){
-	singleList members;
-	createSingleList(&members);
-	groups.cur = groups.root;
-	while (groups.cur != NULL)
-	{
-		if(strcmp( ((group_struct*)groups.cur->element)->group_name, group_name) == 0){
-			members = ((group_struct*)groups.cur->element)->members;
-			break;
-		}
-		groups.cur = groups.cur->next;
-	}
-	return members;
-}
+// singleList getAllMembersOfGroup(singleList groups, char group_name[50]){
+// 	singleList members;
+// 	createSingleList(&members);
+// 	groups.cur = groups.root;
+// 	while (groups.cur != NULL)
+// 	{
+// 		if(strcmp( ((group_struct*)groups.cur->element)->group_name, group_name) == 0){
+// 			members = ((group_struct*)groups.cur->element)->members;
+// 			break;
+// 		}
+// 		groups.cur = groups.cur->next;
+// 	}
+// 	return members;
+// }
 
 void convertSimpleUsersToString(singleList simple_user, char str[1000]){
 	str[0] = '\0';
@@ -792,7 +858,7 @@ void writeToRequestFile(singleList requests) {
 	fclose(f);
 }
 
-//=============== MAIN ==================
+//=============== Main ==================
 int main(int argc, char *argv[]) {
     if (argc == 1) {
         printf("Please input port number\n");
@@ -1014,6 +1080,104 @@ char* getOwnerOfGroup(singleList groups, char group_name[50]) {
     return NULL; // Trả về NULL nếu không tìm thấy nhóm
 }
 
+void uploadFile(int sock, user_struct *loginUser){
+	char buff[50], filePath[100], group_name[50], file_name[50], today[50];
+
+	sendCode(sock, UPLOAD_SUCCESS);
+
+	while(1){
+		readWithCheck(sock, buff, BUFF_SIZE);
+		strcpy(group_name, buff);
+		printf("group_name: %s\n - %ld", buff, strlen(buff));
+		readWithCheck(sock, buff, BUFF_SIZE);
+		buff[strlen(buff) - 1] = '\0';
+		strcpy(file_name, buff);
+		if(checkExistence(3, files, file_name) == 1){
+			sendCode(sock, EXISTENCE_FILE_NAME);
+		}else{
+			sendCode(sock, UPLOAD_SUCCESS);
+			break;
+		}
+	}
+
+	filePath[0] = '\0';
+	strcat(filePath, "./files/");
+	strcat(filePath, group_name);
+	strcat(filePath, "/");
+	strcat(filePath, file_name);
+
+	receiveUploadedFile(sock, filePath);
+
+	// get date of upload
+	time_t t = time(NULL);
+	struct tm tm = *localtime(&t);
+	sprintf( today, "%02d-%02d-%d", tm.tm_mday, tm.tm_mon + 1, tm.tm_year + 1900);
+
+	file_struct *file = (file_struct*)malloc(sizeof(file_struct));
+	strcpy(file->name, file_name);
+	strcpy(file->group, group_name);
+	strcpy(file->owner, loginUser->user_name);
+	strcpy(file->uploaded_at, today);
+	file->downloaded_times = 0;
+
+	insertEnd(&files, file);
+	groups.cur = groups.root;
+	while(groups.cur != NULL){
+		if(strcmp(group_name, ((group_struct*)groups.cur->element)->group_name) == 0){
+			((group_struct*)groups.cur->element)->number_of_files += 1;
+			//singleList files = ((group_struct*)groups.cur->element)->files;
+			simple_file_struct *file_element = (simple_file_struct*) malloc(sizeof(simple_file_struct));
+			strcpy(file_element->file_name, file_name);
+			insertEnd(&((group_struct*)groups.cur->element)->files, file_element); 
+		}
+		groups.cur = groups.cur->next;
+	} 
+	writeToGroupFile(groups);
+	saveFiles(files);
+}
+
+int receiveUploadedFile(int sock, char filePath[100]){
+	int bytesReceived = 0;
+	char recvBuff[1024], fname[100], path[100];
+	FILE *fp;
+
+	printf("Receiving file...\n");
+
+	fp = fopen(filePath, "ab"); 
+	if(NULL == fp)
+	{
+		printf("Error opening file\n");
+		return -1;
+	}
+	
+	double sz=1;
+	/* Receive data in chunks of 256 bytes */
+	while((bytesReceived = readWithCheck(sock, recvBuff, 1024)) > 0)
+	{ 
+		printf("\n\n\nbytes = %d\n",bytesReceived);
+		sz++;
+		printf("Received: %lf Mb\n",(sz/1024));
+		fflush(stdout);
+		fwrite(recvBuff, 1,bytesReceived,fp);
+
+		if(bytesReceived < 1024){
+			sendWithCheck(sock, "broken", 7, 0);
+			break;
+		}else{
+			sendWithCheck(sock, "continue", 9, 0);
+		}
+	}
+	fclose(fp);
+	if(bytesReceived < 0)
+	{
+		printf("\n Read Error \n");
+		return -1;
+	}
+	
+	printf("\nFile OK....Completed\n");
+	return 1;
+}
+
 void * handleThread(void *my_sock) {
     int new_socket = *((int *)my_sock);
 	int REQUEST;
@@ -1047,6 +1211,8 @@ void * handleThread(void *my_sock) {
         				REQUEST = atoi(request_code);
 						data = strtok(NULL, " ");
                         switch(REQUEST) {
+	
+
                             case CREATE_GROUP_REQUEST: 
                                 printf("CREATE_GROUP_REQUEST\n");
                                 int result = createGroup(new_socket, &groups, loginUser, data);
@@ -1114,160 +1280,217 @@ void * handleThread(void *my_sock) {
         								REQUEST = atoi(request_code);
 										data = strtok(NULL, " ");
 
-										switch(REQUEST) {
-											case VIEW_USER_NOT_IN_GROUP:
-												printf("VIEW_USER_NOT_IN_GROUP\n");
-												singleList unjoined_members;
-												createSingleList(&unjoined_members);
-												unjoined_members = unJoinedMembers(users, current_group);
-												convertSimpleGroupsToString(unjoined_members, str);
-												if(strlen(str)==0){
-													sendCode(new_socket, NO_MEMBER_TO_INVITE);
-													break;
-												}
-												snprintf(response, sizeof(response), "%d %s", VIEW_USER_NOT_IN_GROUP, str);
-												sendWithCheck(new_socket, response, strlen(response) + 1, 0);
+										switch (REQUEST)
+										{
+										case UPLOAD_REQUEST:
+											if (isUserAMember(users, current_group, loginUser->user_name) == 1)
+											{
+												printf("UPLOAD_REQUEST\n");
+												uploadFile(new_socket, loginUser);
+												writeToGroupFile(groups);
+											}
+											else
+											{
+												printf("Kicked.\n");
+												sendCode(new_socket, MEMBER_WAS_KICKED);
+												REQUEST = BACK_REQUEST;
+											}
+											break;
+										case VIEW_USER_NOT_IN_GROUP:
+											printf("VIEW_USER_NOT_IN_GROUP\n");
+											singleList unjoined_members;
+											createSingleList(&unjoined_members);
+											unjoined_members = unJoinedMembers(users, current_group);
+											convertSimpleGroupsToString(unjoined_members, str);
+											if (strlen(str) == 0)
+											{
+												sendCode(new_socket, NO_MEMBER_TO_INVITE);
 												break;
-											
-											case VIEW_USER_IN_GROUP:
-												if (isUserAMember(users, current_group, loginUser->user_name) == 1) {
-													printf("VIEW_USER_IN_GROUP\n");
-													if(isOwnerOfGroup(groups, current_group,loginUser->user_name) == 0){
-															sendCode(new_socket, NOT_OWNER_OF_GROUP);
-													} else {
-														singleList members;
-														createSingleList(&members);
-														members = getAllMembersOfGroup(groups, current_group);
-														convertSimpleUsersToString(members, str);
-														if (strlen(str) == 0) {
-															sendCode(new_socket, NO_MEMBER_TO_KICK);
-															break;
-														}
-														snprintf(response, sizeof(response), "%d %s", VIEW_USER_IN_GROUP, str);
-														sendWithCheck(new_socket, response, strlen(response) + 1, 0);
-													}
-												} else {
-													printf("You was kicked!\n");
-													sendCode(new_socket, MEMBER_WAS_KICKED);
-													REQUEST = BACK_REQUEST;
-												}
-												break;
-																					
-											case INVITE_MEMBER_REQUEST:
-												printf("INVITE_MEMBER_REQUEST\n");
-												printf("group = %s, member = %s\n", current_group, data);
-												int tmp = updateRequest(&requests, current_group, data, 1);
-												if (tmp == 1) {
-													printf("Update request successfully\n");
-													sendCode(new_socket , INVITE_SUCCESS);
-													writeToRequestFile(requests);
-												}
-												else if (tmp == 0) {
-													printf("Request already exist\n");
-													sendCode(new_socket, HAS_BEEN_INVITED);
-												}
-												else if (tmp == -1) {
-													printf("User has requested to join this group\n");
-													sendCode(new_socket, ALREADY_REQUESTED_TO_JOIN);
-												}
-												break;
+											}
+											snprintf(response, sizeof(response), "%d %s", VIEW_USER_NOT_IN_GROUP, str);
+											sendWithCheck(new_socket, response, strlen(response) + 1, 0);
+											break;
 
-											case VIEW_REQUEST_IN_GROUP:
-												printf("VIEW_REQUEST_IN_GROUP\n");
-												if(isOwnerOfGroup(groups, current_group,loginUser->user_name) == 0){
-														sendCode(new_socket, NOT_OWNER_OF_GROUP);
+										case VIEW_USER_IN_GROUP:
+											if (isUserAMember(users, current_group, loginUser->user_name) == 1)
+											{
+												printf("VIEW_USER_IN_GROUP\n");
+												if (isOwnerOfGroup(groups, current_group, loginUser->user_name) == 0)
+												{
+													sendCode(new_socket, NOT_OWNER_OF_GROUP);
 												}
-												else {
-													singleList request_list;
-													createSingleList(&request_list);
-													request_list = getRequests(requests, current_group);
-													convertUserRequestsToString(request_list, str);
-													if(strlen(str)==0){
-														sendCode(new_socket, NO_REQUEST_TO_APPROVE);
-														break;
-													}
-													snprintf(response, sizeof(response), "%d %s", VIEW_REQUEST_IN_GROUP, str);
-													sendWithCheck(new_socket, response, strlen(response) + 1, 0);
-												}
-												break;
-											case APPROVE_REQUEST:												
-												printf("group = %s, member = %s\n", current_group, data);												
-												//delete request
-												deleteRequest(&requests, current_group, data, 1);
-												writeToRequestFile(requests);
-												if (addMember(groups, current_group, data) + addGroupToJoinedGroups(users, data, current_group) == 2) {
-													sendCode(new_socket, APPROVE_SUCCESS);
-													saveUsers(users);
-													writeToGroupFile(groups);
-												}																								
-												break;
-
-											case KICK_MEMBER_REQUEST:
-												if (isUserAMember(users, current_group, loginUser->user_name) == 1) {
-													printf("KICK_MEMBER_REQUEST\n");
-													if(isOwnerOfGroup(groups, current_group,loginUser->user_name) == 0){
-														sendCode(new_socket, NOT_OWNER_OF_GROUP);
-													} else {
-														printf("group = %s kick member = %s\n", current_group, data);
-														kickMemberOut(groups, users, current_group, data);
-														sendCode(new_socket, KICK_MEMBER_SUCCESS);
-														singleList members1;
-														createSingleList(&members1);
-														members1 = getAllMembersOfGroup(groups, current_group);
-														printUser(members1);
-													}
-												} else {
-													printf("You was kicked!\n");
-													sendCode(new_socket, MEMBER_WAS_KICKED);
-													REQUEST = BACK_REQUEST;
-												}
-												break;
-
-											case VIEW_USERS_OF_GROUP_REQUEST:
-												printf("VIEW_USERS_OF_GROUP_REQUEST\n");
-												if (isUserAMember(users, current_group, loginUser->user_name) == 1)
+												else
 												{
 													singleList members;
 													createSingleList(&members);
 													members = getAllMembersOfGroup(groups, current_group);
-													char *owner = getOwnerOfGroup(groups, current_group);
 													convertSimpleUsersToString(members, str);
-													if(strlen(str) == 0){
-														strcat(str,owner);
-													}
-													else
+													if (strlen(str) == 0)
 													{
-														strcat(str, "+");
-														strcat(str, owner);
+														sendCode(new_socket, NO_MEMBER_TO_KICK);
+														break;
 													}
-													snprintf(response, sizeof(response), "%d %s", VIEW_USERS_OF_GROUP_REQUEST, str);
+													snprintf(response, sizeof(response), "%d %s", VIEW_USER_IN_GROUP, str);
 													sendWithCheck(new_socket, response, strlen(response) + 1, 0);
+												}
+											}
+											else
+											{
+												printf("You was kicked!\n");
+												sendCode(new_socket, MEMBER_WAS_KICKED);
+												REQUEST = BACK_REQUEST;
+											}
+											break;
+
+										case INVITE_MEMBER_REQUEST:
+											printf("INVITE_MEMBER_REQUEST\n");
+											printf("group = %s, member = %s\n", current_group, data);
+											int tmp = updateRequest(&requests, current_group, data, 1);
+											if (tmp == 1)
+											{
+												printf("Update request successfully\n");
+												sendCode(new_socket, INVITE_SUCCESS);
+												writeToRequestFile(requests);
+											}
+											else if (tmp == 0)
+											{
+												printf("Request already exist\n");
+												sendCode(new_socket, HAS_BEEN_INVITED);
+											}
+											else if (tmp == -1)
+											{
+												printf("User has requested to join this group\n");
+												sendCode(new_socket, ALREADY_REQUESTED_TO_JOIN);
+											}
+											break;
+
+										case VIEW_REQUEST_IN_GROUP:
+											printf("VIEW_REQUEST_IN_GROUP\n");
+											if (isOwnerOfGroup(groups, current_group, loginUser->user_name) == 0)
+											{
+												sendCode(new_socket, NOT_OWNER_OF_GROUP);
+											}
+											else
+											{
+												singleList request_list;
+												createSingleList(&request_list);
+												request_list = getRequests(requests, current_group);
+												convertUserRequestsToString(request_list, str);
+												if (strlen(str) == 0)
+												{
+													sendCode(new_socket, NO_REQUEST_TO_APPROVE);
+													break;
+												}
+												snprintf(response, sizeof(response), "%d %s", VIEW_REQUEST_IN_GROUP, str);
+												sendWithCheck(new_socket, response, strlen(response) + 1, 0);
+											}
+											break;
+										case APPROVE_REQUEST:
+											printf("group = %s, member = %s\n", current_group, data);
+											// delete request
+											deleteRequest(&requests, current_group, data, 1);
+											writeToRequestFile(requests);
+											if (addMember(groups, current_group, data) + addGroupToJoinedGroups(users, data, current_group) == 2)
+											{
+												sendCode(new_socket, APPROVE_SUCCESS);
+												saveUsers(users);
+												writeToGroupFile(groups);
+											}
+											break;
+
+										case KICK_MEMBER_REQUEST:
+											if (isUserAMember(users, current_group, loginUser->user_name) == 1)
+											{
+												printf("KICK_MEMBER_REQUEST\n");
+												if (isOwnerOfGroup(groups, current_group, loginUser->user_name) == 0)
+												{
+													sendCode(new_socket, NOT_OWNER_OF_GROUP);
 												}
 												else
 												{
-													printf("You was kicked!\n");
+													printf("group = %s kick member = %s\n", current_group, data);
+													kickMemberOut(groups, users, current_group, data);
+													sendCode(new_socket, KICK_MEMBER_SUCCESS);
+													singleList members1;
+													createSingleList(&members1);
+													members1 = getAllMembersOfGroup(groups, current_group);
+													printUser(members1);
+												}
+											}
+											else
+											{
+												printf("You was kicked!\n");
+												sendCode(new_socket, MEMBER_WAS_KICKED);
+												REQUEST = BACK_REQUEST;
+											}
+											break;
+
+										case VIEW_USERS_OF_GROUP_REQUEST:
+											printf("VIEW_USERS_OF_GROUP_REQUEST\n");
+											if (isUserAMember(users, current_group, loginUser->user_name) == 1)
+											{
+												singleList members;
+												createSingleList(&members);
+												members = getAllMembersOfGroup(groups, current_group);
+												char *owner = getOwnerOfGroup(groups, current_group);
+												convertSimpleUsersToString(members, str);
+												if (strlen(str) == 0)
+												{
+													strcat(str, owner);
+												}
+												else
+												{
+													strcat(str, "+");
+													strcat(str, owner);
+												}
+												snprintf(response, sizeof(response), "%d %s", VIEW_USERS_OF_GROUP_REQUEST, str);
+												sendWithCheck(new_socket, response, strlen(response) + 1, 0);
+											}
+											else
+											{
+												printf("You was kicked!\n");
+												sendCode(new_socket, MEMBER_WAS_KICKED);
+												REQUEST = BACK_REQUEST;
+											}
+											break;
+
+										case VIEW_FILES_REQUEST: //request code: 134
+												if(isUserAMember(users, current_group, loginUser->user_name) == 1){
+													printf("VIEW_FILES_REQUEST\n");
+													singleList all_files;
+													createSingleList(&all_files);
+													all_files = getAllFilesOfGroup(groups, current_group);
+													convertSimpleFilesToString(all_files, str);
+													printf("%s\n", str);
+													sendWithCheck(new_socket , str, strlen(str) + 1, 0 );
+												}else{
+													printf("kicked");
 													sendCode(new_socket, MEMBER_WAS_KICKED);
 													REQUEST = BACK_REQUEST;
 												}
 												break;
 
-											case QUIT_GROUP_REQUEST:
-												printf("QUIT_GROUP_REQUEST\n");
-												if (isOwnerOfGroup(groups, current_group, loginUser->user_name) == 1) {
-													sendCode(new_socket, IS_OWNER_OF_GROUP);
-												} else {
-													kickMemberOut(groups, users, current_group, loginUser->user_name);
-													sendCode(new_socket, QUIT_GROUP_SUCCESS);
-												}
-												// REQUEST = BACK_REQUEST;
-												break;
-											
-											case BACK_REQUEST:
-												printf("BACK_REQUEST\n");
-												writeToGroupFile(groups);
-												break;
-											default:
-												break;
+										case QUIT_GROUP_REQUEST:
+											printf("QUIT_GROUP_REQUEST\n");
+											if (isOwnerOfGroup(groups, current_group, loginUser->user_name) == 1)
+											{
+												sendCode(new_socket, IS_OWNER_OF_GROUP);
+											}
+											else
+											{
+												kickMemberOut(groups, users, current_group, loginUser->user_name);
+												sendCode(new_socket, QUIT_GROUP_SUCCESS);
+												REQUEST = BACK_REQUEST;
+											}
+											// REQUEST = BACK_REQUEST;
+											break;
+
+										case BACK_REQUEST:
+											printf("BACK_REQUEST\n");
+											writeToGroupFile(groups);
+											break;
+										default:
+											break;
 										}
 									}
 								}

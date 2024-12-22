@@ -20,6 +20,7 @@ int menu3(char group_name[50]);
 void navigation(int sock);
 void signUp(int sock);
 int signIn(int sock);
+int uploadFile(int sock, char groupName[50]);
 void createGroup(int sock);
 void clearBuff();
 
@@ -338,6 +339,91 @@ void createGroup(int sock) {
     }
 }
 
+void* SendFileToServer(int new_socket, char fname[50])
+{
+	
+    FILE *fp = fopen(fname,"rb");
+    if(fp==NULL)
+    {
+        printf("File open error");
+    }   
+
+    /* Read data from file and sendWithCheck it */
+    while(1)
+    {
+        /* First read file in chunks of 256 bytes */
+        unsigned char buff[1024]={0};
+        int nread = fread(buff,1,1024,fp);
+
+        /* If read was success, sendWithCheck data. */
+        if(nread > 0)
+        {
+            write(new_socket, buff, nread);
+        }
+		readWithCheck(new_socket, buff, BUFF_SIZE);
+		if(strcasecmp(buff, "continue") != 0){
+			break;
+		}
+        if (nread < 1024)
+        {
+            if (feof(fp))
+            {
+                printf("End of file\n");
+            }
+            if (ferror(fp))
+                printf("Error reading\n");
+            break;
+        }
+    }
+}
+
+int uploadFile(int sock, char groupName[50]){
+	char fileName[50], filePath[100];
+	char buffer[BUFF_SIZE];
+
+	sendCode(sock, UPLOAD_REQUEST);
+	readWithCheck(sock, buffer, BUFF_SIZE);
+	if(atoi(buffer) != MEMBER_WAS_KICKED){
+		if(atoi(buffer) == UPLOAD_SUCCESS){
+			clearBuff();
+			while(1){
+				sendWithCheck(sock, groupName, strlen(groupName) + 1, 0);
+
+				printf("Enter file name: ");
+				fgets(fileName, 50, stdin);
+
+				sendWithCheck(sock, fileName, sizeof(fileName), 0);
+				readWithCheck(sock, buffer, BUFF_SIZE);
+				if(atoi(buffer) == EXISTENCE_FILE_NAME){
+					printf("File name is not available.\n");
+				}else{
+					do{
+						printf("Enter path to file: ");
+						fgets(buffer, 100, stdin);
+						buffer[strlen(buffer) - 1] = '\0';
+						if(fopen(buffer, "r") != NULL){
+							break;
+						}else{
+							printf("File is not available!!\n");
+						}
+					}while(1);
+					break;
+				}
+			}
+			filePath[0] = '\0';
+			strcat(filePath, buffer);
+			SendFileToServer(sock, filePath);
+
+			
+		}else{
+			printf("System is under maintainace!!\n");
+		}
+	}else{
+		printf("You have been kicked out of this group!!!\n");
+		return 0;
+	}
+	return 1;
+}
 
 
 // MENU APPLICATION
@@ -537,6 +623,29 @@ void navigation(int sock) {
                                             printf("--->Only leader of group can do this<---\n");
                                         }
                                         break;
+
+                                    case 1:
+                                        if( uploadFile(sock, available_group[selected_group-1]) == 0){
+										    z3 = 11;
+									    }
+									    break;
+
+                                    case 5:
+									printf("======================= All Files ========================\n");
+									sendCode(sock, VIEW_FILES_REQUEST);
+									memset(buffer, 0, sizeof(buffer)); 
+                                    readWithCheck(sock, buffer, 1000);
+                                    response_code = strtok(buffer, " ");
+                                    RESPONSE = atoi(response_code);	
+                                    data = strtok(NULL, " ");
+									if(atoi(buffer) != MEMBER_WAS_KICKED){
+										char available_files[20][50] = {'\0','\0','\0','\0','\0','\0','\0','\0','\0','\0','\0','\0','\0','\0','\0','\0','\0','\0','\0','\0'};
+										int number_of_available_files = printAvailableElements(buffer, available_files);
+									}else{
+										printf("You have been kicked out of this group.\n");
+										z3 = 11;
+									}
+									break;
 
                                     case 8:
                                         sendCode(sock, VIEW_USER_IN_GROUP);

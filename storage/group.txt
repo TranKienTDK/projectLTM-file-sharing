@@ -1,14 +1,5 @@
 nhom1
 trong
-2
-vinh
-hien
 0
-nhom2
-trong
-0
-0
-nhom3
-hoang
-0
-0
+1
+ltm123.txt
