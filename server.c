@@ -1380,37 +1380,16 @@ char* getOwnerOfGroup(singleList groups, char group_name[50]) {
 }
 
 void uploadFile(int sock, user_struct *loginUser, char group_name[50], char *data){
-    char *fileName, *filePath, *pathToUpload;
+    char *pathToUpload;
 	char fullPath[150];
     int bytesReceived;
 	char extracted_groupName[50];
-    
-    // Parse data from data
-    int requestCode;
-    // Lấy token đầu tiên và gán cho fileName
-    fileName = strtok(data, "|");
-
-    // Lấy token tiếp theo và gán cho filePath
-    if (fileName != NULL) {
-        filePath = strtok(NULL, "|");
-    }
-
-    // Lấy token cuối cùng và gán cho pathToUpload
-    if (filePath != NULL) {
-        pathToUpload = strtok(NULL, "|");
-    }
 
 	 // Construct the full path in the files directory
-    snprintf(fullPath, sizeof(fullPath), "./files/%s/%s", group_name, pathToUpload);
+    snprintf(fullPath, sizeof(fullPath), "./files/%s/%s", group_name, data);
     sscanf(fullPath, "files/%49[^/]/", extracted_groupName);
 	printf("%s\n", fullPath);
 	int result = receiveUploadedFile(sock, fullPath);
-    // Process request based on request code
-        // printf("Received upload request for file: %s\n", fileName);
-        // printf("Local path: %s\n", filePath);
-        // printf("Upload path: %s\n", pathToUpload);
-        
-        // Proceed to receive file from client and save it at the specified path
         
 }
 
@@ -1456,45 +1435,52 @@ int receiveUploadedFile(int sock, char filePath[100]){
 	sendCode(sock, UPLOAD_SUCCESS);
 	return 1;
 }
+void* SendFileToClient(int new_socket, char fname[50], char group_name[50])
+{
+	char path[100];
+    write(new_socket, fname,256);
 
-// int receiveUploadedFile(int sock, char filePath[100]) {
-//     int bytesReceived = 0;
-//     char recvBuff[1024];
-//     FILE *fp;
+	path[0] = '\0';
+	strcat(path, "./files/");
+	strcat(path, group_name);
+	strcat(path, "/");
+	strcat(path, fname);
+	printf("file: %s\n", path);
 
-//     printf("Receiving file...\n");
-//     fp = fopen(filePath, "ab");
-//     if (fp == NULL) {
-//         printf("Error opening file\n");
-//         return -1;
-//     }
+    FILE *fp = fopen(path,"rb");
+    if(fp==NULL)
+    {
+        printf("File opern error");
+    }   
 
-//     double sz = 1;
-//     while ((bytesReceived = readWithCheck(sock, recvBuff, 1024)) > 0) {
-//         fwrite(recvBuff, 1, bytesReceived, fp);
-//         sz += bytesReceived;
-//         printf("Received: %lf Mb\n", (sz / 1024));
-//         if (bytesReceived < 1024) {
-//             char endSignal[4];
-// 			int n = readWithCheck(sock, endSignal, 4);
-// 			if (n > 0) {
-//     			endSignal[n] = '\0';  // Đảm bảo nó là chuỗi kết thúc
-// 				if (strcmp(endSignal, "EOF") == 0) {
-// 					printf("Received EOF signal, file transfer completed.\n");
-// 					sendCode(sock, UPLOAD_SUCCESS);
-// 					fclose(fp);
-// 				} else {
-// 					printf("Expected EOF, received: %s\n", endSignal);
-// 				}
-// 			} else {
-// 				printf("Error receiving EOF signal.\n");
-// 			}
-//         }
-//     }
-//     fclose(fp);
-//     printf("File OK... Completed\n");
-//     return 1;
-// }
+    /* Read data from file and send it */
+    while(1)
+    {
+        /* First read file in chunks of 256 bytes */
+        unsigned char buff[1024]={0};
+        int nread = fread(buff,1,1024,fp);
+
+        /* If read was success, send data. */
+        if(nread > 0)
+        {
+            write(new_socket, buff, nread);
+        }
+		readWithCheck(new_socket, buff, BUFF_SIZE);
+		if(strcasecmp(buff, "continue") != 0){
+			break;
+		}
+        if (nread < 1024)
+        {
+            if (feof(fp))
+            {
+                printf("End of file\n");
+            }
+            if (ferror(fp))
+                printf("Error reading\n");
+            break;
+        }
+    }
+}
 
 void * handleThread(void *my_sock) {
     int new_socket = *((int *)my_sock);
@@ -1529,8 +1515,6 @@ void * handleThread(void *my_sock) {
         				REQUEST = atoi(request_code);
 						data = strtok(NULL, " ");
                         switch(REQUEST) {
-	
-
                             case CREATE_GROUP_REQUEST: 
                                 printf("CREATE_GROUP_REQUEST\n");
                                 int result = createGroup(new_socket, &groups, loginUser, data);
@@ -1604,12 +1588,26 @@ void * handleThread(void *my_sock) {
 											if (isUserAMember(users, current_group, loginUser->user_name) == 1)
 											{
 												printf("UPLOAD_REQUEST\n");
-												uploadFile(new_socket, loginUser, current_group, data);
-												
+												sendCode(new_socket, READY_TO_UPLOAD);
+												uploadFile(new_socket, loginUser, current_group, data);												
 											}
 											else
 											{
 												printf("Kicked.\n");
+												sendCode(new_socket, MEMBER_WAS_KICKED);
+												REQUEST = BACK_REQUEST;
+											}
+											break;
+										case DOWNLOAD_REQUEST:
+											if (isUserAMember(users, current_group, loginUser->user_name) == 1)
+											{
+												printf("DOWNLOAD_REQUEST\n");
+												sendCode(new_socket, READY_TO_DOWNLOAD);
+												SendFileToClient(new_socket, data, current_group);
+											}
+											else
+											{
+												printf("kicked\n");
 												sendCode(new_socket, MEMBER_WAS_KICKED);
 												REQUEST = BACK_REQUEST;
 											}
@@ -1842,32 +1840,32 @@ void * handleThread(void *my_sock) {
 									}
 								}
 								break;
-							case NOTIFICATION_REQUEST: 
-								printf("NOTIFICATION_REQUEST\n");
-								singleList request_list;
-								createSingleList(&request_list);
-								request_list = getInvites(requests, loginUser->user_name);
-								convertGroupsInviteToString(request_list, str);
-								if(strlen(str) == 0){
-									sendCode(new_socket,NO_INVITE);
-									break;
+							case VIEW_ALL_GROUP_REQUEST: 
+								printf("VIEW_ALL_GROUP_REQUEST\n");
+							
+								singleList join_group;
+								createSingleList(&join_group);
+								join_group = joinedGroups(users, loginUser->user_name);
+								char j_str[100];
+								convertSimpleGroupsToString(join_group, j_str);
+
+								singleList un_join_group;
+								createSingleList(&un_join_group);
+								un_join_group = unJoinedGroups(groups, users, loginUser->user_name);
+								char un_join_str[100];
+								convertSimpleGroupsToString(un_join_group, un_join_str);
+
+								if(strlen(j_str) == 0){
+								snprintf(response, sizeof(response), "%d %s", VIEW_ALL_GROUP_REQUEST, un_join_str);
 								}
-								snprintf(response, sizeof(response), "%d %s", NOTIFICATION_REQUEST, str);
-								sendWithCheck(new_socket, response, strlen(response)+1, 0);
-							case ACCEPT_INVITE_REQUEST: 
-									printf("group = %s\n", data);
-									//delete request
-									deleteRequest(&requests, data, loginUser->user_name, 0);
-									writeToRequestFile(requests);
-									if (addMember(groups, data, loginUser->user_name) + addGroupToJoinedGroups(users, loginUser->user_name, buff) == 2) {
-										sendCode(new_socket, ACCEPT_SUCCESS);
-										saveUsers(users);
-										writeToGroupFile(groups);
-									}
-									else {
-										sendCode(new_socket , NO_ACCEPT_INVITE);
-									}
-								
+								else if(strlen(un_join_str) == 0)
+								{
+								snprintf(response, sizeof(response), "%d %s", VIEW_ALL_GROUP_REQUEST, j_str);
+								}
+								else{
+								snprintf(response, sizeof(response), "%d %s+%s", VIEW_ALL_GROUP_REQUEST, un_join_str, j_str);
+								}
+								sendWithCheck(new_socket, response, strlen(response) + 1, 0);
 								break;
                             case LOGOUT_REQUEST:
                                 printf("LOGOUT_REQUEST\n");

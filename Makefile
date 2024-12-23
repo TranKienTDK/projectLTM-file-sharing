@@ -7,7 +7,7 @@ s:
 	./server 8080
 c:
 	clear
-	./client 192.168.18.130 8080
+	./client 127.0.0.1 8080
 clean:
 	clear
 	rm -fr server
