@@ -3,3 +3,8 @@ trong
 0
 1
 ltm123.txt
+nhom2
+trong
+1
+kien
+0

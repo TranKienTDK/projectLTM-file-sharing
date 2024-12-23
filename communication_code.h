@@ -29,6 +29,10 @@
 #define VIEW_REQUEST_IN_GROUP 147
 #define CREATE_FOLDER_REQUEST 148
 #define VIEW_FOLDER_REQUEST 149
+#define RENAME_FOLDER_REQUEST 150
+#define DELETE_FOLDER_REQUEST 151
+#define COPY_FOLDER_REQUEST 152
+#define MOVE_FOLDER_REQUEST 153
 
 
 //==================================================//
@@ -51,6 +55,10 @@
 #define KICK_MEMBER_SUCCESS 814
 #define CREATE_FOLDER_SUCCESS 815
 #define VIEW_FOLDER_SUCCESS 816
+#define RENAME_FOLDER_SUCCESS 817
+#define DELETE_FOLDER_SUCCESS 818
+#define COPY_FOLDER_SUCCESS 819
+#define MOVE_FOLDER_SUCCESS 820
 
 
 //==================================================//
@@ -75,9 +83,15 @@
 #define NO_ACCEPT_INVITE 916
 #define IS_OWNER_OF_GROUP 917
 #define NO_FILE_TO_RENAME 918
+#define FOLDER_EXISTS 919
 #define JOINED_ALL_GROUP 920
 #define PATH_NOT_EXIST 921
 #define VIEW_FOLDER_FAIL 922
 #define UPLOAD_FAILED 923
+#define RENAME_FOLDER_FAIL 924
+#define NOT_BELONG_THAT_GROUP 925
+#define DELETE_FOLDER_FAIL 926
+#define COPY_FOLDER_FAIL 927
+#define MOVE_FOLDER_FAIL 928
 #define INVALID_FORMAT 999
 //==================================================//

@@ -17,6 +17,7 @@
 #include <pthread.h>
 #include <asm-generic/socket.h>
 #include <dirent.h>
+#include <ftw.h>
 
 #define BUFF_SIZE 256
 singleList users, groups, requests, files;
@@ -1027,6 +1028,221 @@ int signIn(int sock, singleList users, user_struct **loginUser, char *data) {
     return 0;
 }
 
+int renameFolder(int sock, user_struct *loginUser, char *group_name, char *data) {
+    char old_folder_path[100], new_folder_name[50], full_old_path[150], full_new_path[200];
+    struct stat st;
+
+    // Check if the user is the owner of the group
+    if (!isOwnerOfGroup(groups, group_name, loginUser->user_name)) {
+        sendCode(sock, NOT_OWNER_OF_GROUP);
+        return -1;
+    }
+
+    // Parse the old folder path and new folder name from data
+    sscanf(data, "%[^|]|%s", old_folder_path, new_folder_name);
+
+    // Construct the full old path using the group name
+    snprintf(full_old_path, sizeof(full_old_path), "./files/%s/%s", group_name, old_folder_path);
+
+    // Check if the old folder exists
+    if (stat(full_old_path, &st) != 0 || !S_ISDIR(st.st_mode)) {
+        sendCode(sock, PATH_NOT_EXIST);
+        return -1;
+    }
+
+    // Construct the full new path using the group name and the parent directory of the old folder
+    char *last_slash = strrchr(old_folder_path, '/');
+    if (last_slash != NULL) {
+        *last_slash = '\0';
+        snprintf(full_new_path, sizeof(full_new_path), "./files/%s/%s/%s", group_name, old_folder_path, new_folder_name);
+    } else {
+        snprintf(full_new_path, sizeof(full_new_path), "./files/%s/%s", group_name, new_folder_name);
+    }
+
+    // Rename the folder
+    if (rename(full_old_path, full_new_path) == 0) {
+        sendCode(sock, RENAME_FOLDER_SUCCESS);
+    } else {
+        sendCode(sock, RENAME_FOLDER_FAIL);
+    }
+    return 0;
+}
+
+int deleteFolder(int sock, user_struct *loginUser, char *group_name, char *data) {
+    char folder_path[100], full_path[150];
+    struct stat st;
+
+    // Check if the user is the owner of the group
+    if (!isOwnerOfGroup(groups, group_name, loginUser->user_name)) {
+        sendCode(sock, NOT_OWNER_OF_GROUP);
+        return -1;
+    }
+
+    // Parse the folder path from the received data
+    sscanf(data, "%s", folder_path);
+
+    // Construct the full path using the group name
+    snprintf(full_path, sizeof(full_path), "./files/%s/%s", group_name, folder_path);
+
+    // Check if the folder exists
+    if (stat(full_path, &st) != 0 || !S_ISDIR(st.st_mode)) {
+        sendCode(sock, DELETE_FOLDER_FAIL);
+        return -1;
+    }
+
+    // Delete the folder and its contents
+    char command[200];
+    snprintf(command, sizeof(command), "rm -rf %s", full_path);
+    if (system(command) == 0) {
+        sendCode(sock, DELETE_FOLDER_SUCCESS);
+    } else {
+        sendCode(sock, DELETE_FOLDER_FAIL);
+    }
+    return 0;
+}
+
+int copyFileOrDir(const char *source, const char *destination) {
+    struct stat st;
+    if (stat(source, &st) == -1) {
+        return -1;
+    }
+
+    if (S_ISDIR(st.st_mode)) {
+        mkdir(destination, st.st_mode);
+        struct dirent *entry;
+        DIR *dir = opendir(source);
+        if (dir == NULL) {
+            return -1;
+        }
+
+        while ((entry = readdir(dir)) != NULL) {
+            if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) {
+                continue;
+            }
+
+            char src_path[512], dest_path[512];
+            snprintf(src_path, sizeof(src_path), "%s/%s", source, entry->d_name);
+            snprintf(dest_path, sizeof(dest_path), "%s/%s", destination, entry->d_name);
+
+            if (copyFileOrDir(src_path, dest_path) == -1) {
+                closedir(dir);
+                return -1;
+            }
+        }
+        closedir(dir);
+    } else {
+        FILE *src_file = fopen(source, "rb");
+        if (src_file == NULL) {
+            return -1;
+        }
+
+        FILE *dest_file = fopen(destination, "wb");
+        if (dest_file == NULL) {
+            fclose(src_file);
+            return -1;
+        }
+
+        char buffer[8192];
+        size_t bytes;
+        while ((bytes = fread(buffer, 1, sizeof(buffer), src_file)) > 0) {
+            fwrite(buffer, 1, bytes, dest_file);
+        }
+
+        fclose(src_file);
+        fclose(dest_file);
+    }
+
+    return 0;
+}
+
+int copyFolder(int sock, user_struct *loginUser, char *group_name, char *data) {
+    char source_folder_path[100], dest_folder_path[100], full_source_path[150], full_dest_path[150];
+    struct stat st;
+
+    // Parse the source and destination folder paths from data
+    sscanf(data, "%[^|]|%s", source_folder_path, dest_folder_path);
+
+    // Construct the full source and destination paths using the group name
+    snprintf(full_source_path, sizeof(full_source_path), "./files/%s/%s", group_name, source_folder_path);
+    snprintf(full_dest_path, sizeof(full_dest_path), "./files/%s/%s", group_name, dest_folder_path);
+
+    // Check if the source folder exists
+    if (stat(full_source_path, &st) != 0 || !S_ISDIR(st.st_mode)) {
+        sendCode(sock, PATH_NOT_EXIST);
+        return -1;
+    }
+
+    // Check if the destination path exists
+    if (stat(full_dest_path, &st) != 0 || !S_ISDIR(st.st_mode)) {
+        sendCode(sock, PATH_NOT_EXIST);
+        return -1;
+    }
+
+    // Append the source folder name to the destination path
+    char *source_folder_name = strrchr(source_folder_path, '/');
+    if (source_folder_name != NULL) {
+        source_folder_name++;
+    } else {
+        source_folder_name = source_folder_path;
+    }
+    snprintf(full_dest_path, sizeof(full_dest_path), "./files/%s/%s/%s", group_name, dest_folder_path, source_folder_name);
+
+    // Copy the folder and its contents
+    if (copyFileOrDir(full_source_path, full_dest_path) == 0) {
+        sendCode(sock, COPY_FOLDER_SUCCESS);
+    } else {
+        sendCode(sock, COPY_FOLDER_FAIL);
+    }
+    return 0;
+}
+
+int moveFolder(int sock, user_struct *loginUser, char *group_name, char *data) {
+    char source_folder_path[100], dest_folder_path[100], full_source_path[150], full_dest_path[150];
+    struct stat st;
+
+    // Check if the user is the owner of the group
+    if (!isOwnerOfGroup(groups, group_name, loginUser->user_name)) {
+        sendCode(sock, NOT_OWNER_OF_GROUP);
+        return -1;
+    }
+
+    // Parse the source and destination folder paths from data
+    sscanf(data, "%[^|]|%s", source_folder_path, dest_folder_path);
+
+    // Construct the full source and destination paths using the group name
+    snprintf(full_source_path, sizeof(full_source_path), "./files/%s/%s", group_name, source_folder_path);
+    snprintf(full_dest_path, sizeof(full_dest_path), "./files/%s/%s", group_name, dest_folder_path);
+
+    // Check if the source folder exists
+    if (stat(full_source_path, &st) != 0 || !S_ISDIR(st.st_mode)) {
+        sendCode(sock, PATH_NOT_EXIST);
+        return -1;
+    }
+
+    // Check if the destination path exists
+    if (stat(full_dest_path, &st) != 0 || !S_ISDIR(st.st_mode)) {
+        sendCode(sock, PATH_NOT_EXIST);
+        return -1;
+    }
+
+    // Append the source folder name to the destination path
+    char *source_folder_name = strrchr(source_folder_path, '/');
+    if (source_folder_name != NULL) {
+        source_folder_name++;
+    } else {
+        source_folder_name = source_folder_path;
+    }
+    snprintf(full_dest_path, sizeof(full_dest_path), "./files/%s/%s/%s", group_name, dest_folder_path, source_folder_name);
+
+    // Move the folder and its contents
+    if (rename(full_source_path, full_dest_path) == 0) {
+        sendCode(sock, MOVE_FOLDER_SUCCESS);
+    } else {
+        sendCode(sock, MOVE_FOLDER_FAIL);
+    }
+    return 0;
+}
+
 // CREATE GROUP SERVER
 int createGroup(int sock, singleList * groups, user_struct *loginUser, char *data) {
     char noti[100], cmd[100];
@@ -1070,44 +1286,40 @@ int createGroup(int sock, singleList * groups, user_struct *loginUser, char *dat
 }
 
 int createFolder(int sock, char group_name[50], char *data) {
-    char folder_name[50];
     char folder_path[256];
     char full_path[512];
     struct stat st = {0};
 
-    // Parse foldername and folderpath from data
-    sscanf(data, "%[^|]|%s", folder_name, folder_path);
+    // Parse folder path from data
+    sscanf(data, "%s", folder_path);
 
-    // Verify the group_name is part of the folderpath
-    char expected_prefix[100];
-    snprintf(expected_prefix, sizeof(expected_prefix), "/%s/", group_name);
+    // Construct the full path using the group name
+    snprintf(full_path, sizeof(full_path), "./files/%s/%s", group_name, folder_path);
 
-    if (strncmp(folder_path, expected_prefix, strlen(expected_prefix)) != 0) {
-        printf("Error: Folder path does not start with the correct group name.\n");
-        sendCode(sock, PATH_NOT_EXIST);
-        return -1;
-    }
-
-    // Create the directory if it does not exist
-    snprintf(full_path, sizeof(full_path), "./files%s", folder_path);
-    char *last_slash = strrchr(full_path, '/');
+    // Check if the parent directory exists
+    char parent_path[512];
+    strcpy(parent_path, full_path);
+    char *last_slash = strrchr(parent_path, '/');
     if (last_slash != NULL) {
-        *last_slash = '\0'; // Temporarily terminate the string at the last slash to check the parent directory
-        if (stat(full_path, &st) == 0 && S_ISDIR(st.st_mode)) {
-            *last_slash = '/'; // Restore the full path
-            if (mkdir(full_path, 0777) == -1) {
-                perror("Failed to create folder");
-                sendCode(sock, PATH_NOT_EXIST);
-                return -1;
-            }
-        } else {
-            printf("Parent directory does not exist.\n");
+        *last_slash = '\0';
+        if (stat(parent_path, &st) != 0 || !S_ISDIR(st.st_mode)) {
             sendCode(sock, PATH_NOT_EXIST);
             return -1;
         }
     }
 
-    printf("Folder created successfully: %s\n", full_path);
+    // Check if the folder already exists
+    if (stat(full_path, &st) == 0 && S_ISDIR(st.st_mode)) {
+        sendCode(sock, FOLDER_EXISTS);
+        return -1;
+    }
+
+    // Create the directory if it does not exist
+    if (mkdir(full_path, 0777) == -1) {
+        sendCode(sock, PATH_NOT_EXIST);
+        return -1;
+    }
+
     sendCode(sock, CREATE_FOLDER_SUCCESS);
     return 0;
 }
@@ -1119,29 +1331,12 @@ int viewFolderData(int sock, char group_name[50], char *data) {
     struct dirent *entry;
     char response[100] = "";
     char message[100];
-	char extracted_group_name[50];
 
     // Parse the folder path from the received data
     sscanf(data, "%s", folder_path);
 
-    // Build the full directory path
-    snprintf(full_path, sizeof(full_path), "./files/%s", folder_path);
-
-	if (sscanf(full_path, "./files/%49[^/]", extracted_group_name) == 1) {
-        // Check if the extracted group name matches the provided group name
-        if (strcmp(extracted_group_name, group_name) != 0) {
-            snprintf(response, BUFF_SIZE, "%d %s", VIEW_FOLDER_FAIL, "Group name does not match the requested folder path.");
-            sendWithCheck(sock, response, strlen(response), 0);
-            return -1;
-        }
-	}
-
-    // // Check if the folder path starts with the correct group name
-    // if (strstr(full_path, group_name) != full_path + 7) {
-    //     snprintf(message, BUFF_SIZE, "%d %s", PATH_NOT_EXIST, "Group name does not match the requested folder path.");
-    //     sendWithCheck(sock, message, strlen(message), 0);
-    //     return -1;
-    // }
+    // Build the full directory path using the group name
+    snprintf(full_path, sizeof(full_path), "./files/%s/%s", group_name, folder_path);
 
     // Open the directory
     dp = opendir(full_path);
@@ -1154,10 +1349,8 @@ int viewFolderData(int sock, char group_name[50], char *data) {
     // List the contents of the directory
     while ((entry = readdir(dp)) != NULL) {
         if (strcmp(entry->d_name, ".") != 0 && strcmp(entry->d_name, "..") != 0) {
-            if (strlen(response) > 0) {
-                strcat(response, "+"); // Append '+' before each entry except the first
-            }
             strcat(response, entry->d_name);
+            strcat(response, "+");
         }
     }
     closedir(dp);
@@ -1165,6 +1358,8 @@ int viewFolderData(int sock, char group_name[50], char *data) {
     // Send the response back to the client
     if (strlen(response) == 0) {
         snprintf(response, BUFF_SIZE, "No files or directories.");
+    } else {
+        response[strlen(response) - 1] = '\0';  // Remove the trailing '+'
     }
 
     snprintf(message, BUFF_SIZE, "%d %s", VIEW_FOLDER_SUCCESS, response);
@@ -1615,6 +1810,26 @@ void * handleThread(void *my_sock) {
 
 										case VIEW_FOLDER_REQUEST:
 											viewFolderData(new_socket, current_group, data);
+											break;
+
+										case RENAME_FOLDER_REQUEST:
+											printf("RENAME_FOLDER_REQUEST\n");
+											renameFolder(new_socket, loginUser, current_group, data);
+											break;
+
+										case DELETE_FOLDER_REQUEST:
+											printf("DELETE_FOLDER_REQUEST\n");
+											deleteFolder(new_socket, loginUser, current_group, data);
+											break;
+
+										case COPY_FOLDER_REQUEST:
+											printf("COPY_FOLDER_REQUEST\n");
+											copyFolder(new_socket, loginUser, current_group, data);
+											break;
+
+										case MOVE_FOLDER_REQUEST:
+											printf("MOVE_FOLDER_REQUEST\n");
+											moveFolder(new_socket, loginUser, current_group, data);
 											break;
 
 										case BACK_REQUEST:
