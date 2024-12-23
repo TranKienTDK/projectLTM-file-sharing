@@ -1243,6 +1243,153 @@ int moveFolder(int sock, user_struct *loginUser, char *group_name, char *data) {
     return 0;
 }
 
+int renameFile(int sock, user_struct *loginUser, char *group_name, char *data) {
+    char old_file_path[100], new_file_name[50], full_old_path[150], full_new_path[200];
+    struct stat st;
+
+    // Check if the user is the owner of the group
+    if (!isOwnerOfGroup(groups, group_name, loginUser->user_name)) {
+        sendCode(sock, NOT_OWNER_OF_GROUP);
+        return -1;
+    }
+
+    // Parse the old file path and new file name from data
+    sscanf(data, "%[^|]|%s", old_file_path, new_file_name);
+
+    // Construct the full old path using the group name
+    snprintf(full_old_path, sizeof(full_old_path), "./files/%s/%s", group_name, old_file_path);
+
+    // Check if the old file exists
+    if (stat(full_old_path, &st) != 0 || !S_ISREG(st.st_mode)) {
+        sendCode(sock, PATH_NOT_EXIST);
+        return -1;
+    }
+
+    // Construct the full new path using the group name and the parent directory of the old file
+    char *last_slash = strrchr(old_file_path, '/');
+    if (last_slash != NULL) {
+        *last_slash = '\0';
+        snprintf(full_new_path, sizeof(full_new_path), "./files/%s/%s/%s", group_name, old_file_path, new_file_name);
+    } else {
+        snprintf(full_new_path, sizeof(full_new_path), "./files/%s/%s", group_name, new_file_name);
+    }
+
+    // Rename the file
+    if (rename(full_old_path, full_new_path) == 0) {
+        sendCode(sock, RENAME_FILE_SUCCESS);
+    } else {
+        sendCode(sock, RENAME_FILE_FAIL);
+    }
+    return 0;
+}
+
+int copyFile(int sock, user_struct *loginUser, char *group_name, char *data) {
+    char source_file_path[100], dest_file_path[100], full_source_path[150], full_dest_path[150];
+    struct stat st;
+
+    // Parse the source and destination file paths from data
+    sscanf(data, "%[^|]|%s", source_file_path, dest_file_path);
+
+    // Construct the full source and destination paths using the group name
+    snprintf(full_source_path, sizeof(full_source_path), "./files/%s/%s", group_name, source_file_path);
+    snprintf(full_dest_path, sizeof(full_dest_path), "./files/%s/%s", group_name, dest_file_path);
+
+    // Check if the source file exists
+    if (stat(full_source_path, &st) != 0 || !S_ISREG(st.st_mode)) {
+        sendCode(sock, PATH_NOT_EXIST);
+        return -1;
+    }
+
+    // Copy the file
+    FILE *src_file = fopen(full_source_path, "rb");
+    if (src_file == NULL) {
+        sendCode(sock, COPY_FILE_FAIL);
+        return -1;
+    }
+
+    FILE *dest_file = fopen(full_dest_path, "wb");
+    if (dest_file == NULL) {
+        fclose(src_file);
+        sendCode(sock, COPY_FILE_FAIL);
+        return -1;
+    }
+
+    char buffer[8192];
+    size_t bytes;
+    while ((bytes = fread(buffer, 1, sizeof(buffer), src_file)) > 0) {
+        fwrite(buffer, 1, bytes, dest_file);
+    }
+
+    fclose(src_file);
+    fclose(dest_file);
+
+    sendCode(sock, COPY_FILE_SUCCESS);
+    return 0;
+}
+
+int moveFile(int sock, user_struct *loginUser, char *group_name, char *data) {
+    char source_file_path[100], dest_file_path[100], full_source_path[150], full_dest_path[150];
+    struct stat st;
+
+    // Check if the user is the owner of the group
+    if (!isOwnerOfGroup(groups, group_name, loginUser->user_name)) {
+        sendCode(sock, NOT_OWNER_OF_GROUP);
+        return -1;
+    }
+
+    // Parse the source and destination file paths from data
+    sscanf(data, "%[^|]|%s", source_file_path, dest_file_path);
+
+    // Construct the full source and destination paths using the group name
+    snprintf(full_source_path, sizeof(full_source_path), "./files/%s/%s", group_name, source_file_path);
+    snprintf(full_dest_path, sizeof(full_dest_path), "./files/%s/%s", group_name, dest_file_path);
+
+    // Check if the source file exists
+    if (stat(full_source_path, &st) != 0 || !S_ISREG(st.st_mode)) {
+        sendCode(sock, PATH_NOT_EXIST);
+        return -1;
+    }
+
+    // Move the file
+    if (rename(full_source_path, full_dest_path) == 0) {
+        sendCode(sock, MOVE_FILE_SUCCESS);
+    } else {
+        sendCode(sock, MOVE_FILE_FAIL);
+    }
+    return 0;
+}
+
+int deleteFile(int sock, user_struct *loginUser, char *group_name, char *data) {
+    char file_path[100], full_path[150];
+    struct stat st;
+
+    // Check if the user is the owner of the group
+    if (!isOwnerOfGroup(groups, group_name, loginUser->user_name)) {
+        sendCode(sock, NOT_OWNER_OF_GROUP);
+        return -1;
+    }
+
+    // Parse the file path from the received data
+    sscanf(data, "%s", file_path);
+
+    // Construct the full path using the group name
+    snprintf(full_path, sizeof(full_path), "./files/%s/%s", group_name, file_path);
+
+    // Check if the file exists
+    if (stat(full_path, &st) != 0 || !S_ISREG(st.st_mode)) {
+        sendCode(sock, PATH_NOT_EXIST);
+        return -1;
+    }
+
+    // Delete the file
+    if (remove(full_path) == 0) {
+        sendCode(sock, DELETE_FILE_SUCCESS);
+    } else {
+        sendCode(sock, DELETE_FILE_FAIL);
+    }
+    return 0;
+}
+
 // CREATE GROUP SERVER
 int createGroup(int sock, singleList * groups, user_struct *loginUser, char *data) {
     char noti[100], cmd[100];
@@ -1828,6 +1975,26 @@ void * handleThread(void *my_sock) {
 										case MOVE_FOLDER_REQUEST:
 											printf("MOVE_FOLDER_REQUEST\n");
 											moveFolder(new_socket, loginUser, current_group, data);
+											break;
+
+										case RENAME_FILE_REQUEST:
+											printf("RENAME_FILE_REQUEST\n");
+											renameFile(new_socket, loginUser, current_group, data);
+											break;
+										
+										case DELETE_FILE_REQUEST:
+											printf("DELETE_FILE_REQUEST\n");
+											deleteFile(new_socket, loginUser, current_group, data);
+											break;
+
+										case COPY_FILE_REQUEST:
+											printf("COPY_FILE_REQUEST\n");
+											copyFile(new_socket, loginUser, current_group, data);
+											break;
+
+										case MOVE_FILE_REQUEST:
+											printf("MOVE_FILE_REQUEST\n");
+											moveFile(new_socket, loginUser, current_group, data);
 											break;
 
 										case BACK_REQUEST:

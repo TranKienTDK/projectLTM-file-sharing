@@ -33,6 +33,10 @@
 #define DELETE_FOLDER_REQUEST 151
 #define COPY_FOLDER_REQUEST 152
 #define MOVE_FOLDER_REQUEST 153
+#define RENAME_FILE_REQUEST 190
+#define COPY_FILE_REQUEST 191
+#define MOVE_FILE_REQUEST 192
+#define DELETE_FILE_REQUEST 193
 
 
 //==================================================//
@@ -62,6 +66,10 @@
 #define DOWN_LOAD_SUCCESS 821
 #define READY_TO_UPLOAD 822
 #define READY_TO_DOWNLOAD 823
+#define RENAME_FILE_SUCCESS 850
+#define COPY_FILE_SUCCESS 851
+#define MOVE_FILE_SUCCESS 852
+#define DELETE_FILE_SUCCESS 853
 
 
 //==================================================//
@@ -96,5 +104,9 @@
 #define DELETE_FOLDER_FAIL 926
 #define COPY_FOLDER_FAIL 927
 #define MOVE_FOLDER_FAIL 928
+#define RENAME_FILE_FAIL 929
+#define COPY_FILE_FAIL 930
+#define MOVE_FILE_FAIL 931
+#define DELETE_FILE_FAIL 932
 #define INVALID_FORMAT 999
 //==================================================//

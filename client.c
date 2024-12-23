@@ -195,7 +195,11 @@ int menu3(char group_name[50]) {
     printf("14. Rename folder\n");
     printf("15. Delete folder\n");
     printf("16. Copy folder\n");
-    printf("17. Move folder\n");  
+    printf("17. Rename folder\n"); 
+    printf("18. Rename file\n");
+    printf("19. Copy file\n");
+    printf("20. Move file\n");
+    printf("21. Delete file\n");  
 	printf("==========================================================\n");
     printf("=> Enter your choice: ");
     catch = scanf("%d", &choice);
@@ -655,6 +659,120 @@ void moveFolder(int sock, char groupName[50]) {
     }
 }
 
+void renameFile(int sock, char groupName[50]) {
+    char old_file_path[100], new_file_name[50], buff[BUFF_SIZE];
+    clearBuff();
+
+    printf("Enter the current file path: ");
+    fgets(old_file_path, sizeof(old_file_path), stdin);
+    old_file_path[strcspn(old_file_path, "\n")] = '\0';
+
+    printf("Enter the new file name: ");
+    fgets(new_file_name, sizeof(new_file_name), stdin);
+    new_file_name[strcspn(new_file_name, "\n")] = '\0';
+
+    snprintf(buff, BUFF_SIZE, "%d %s|%s", RENAME_FILE_REQUEST, old_file_path, new_file_name);
+    sendWithCheck(sock, buff, strlen(buff), 0);
+
+    readWithCheck(sock, buff, BUFF_SIZE);
+    int responseCode = atoi(buff);
+    if (responseCode == RENAME_FILE_SUCCESS) {
+        printf("File renamed successfully!\n");
+    } else if (responseCode == RENAME_FILE_FAIL) {
+        printf("Failed to rename file.\n");
+    } else if (responseCode == NOT_BELONG_THAT_GROUP) {
+        printf("You do not belong to the group specified in the file path.\n");
+    } else if (responseCode == NOT_OWNER_OF_GROUP) {
+        printf("Only leader can do this.\n");
+    } else {
+        printf("Path file not exists.\n");
+    }
+}
+
+void copyFile(int sock, char groupName[50]) {
+    char source_file_path[100], dest_file_path[100], buff[BUFF_SIZE];
+    clearBuff();
+
+    printf("Enter the source file path: ");
+    fgets(source_file_path, sizeof(source_file_path), stdin);
+    source_file_path[strcspn(source_file_path, "\n")] = '\0';
+
+    printf("Enter the destination file path: ");
+    fgets(dest_file_path, sizeof(dest_file_path), stdin);
+    dest_file_path[strcspn(dest_file_path, "\n")] = '\0';
+
+    snprintf(buff, BUFF_SIZE, "%d %s|%s", COPY_FILE_REQUEST, source_file_path, dest_file_path);
+    sendWithCheck(sock, buff, strlen(buff), 0);
+
+    readWithCheck(sock, buff, BUFF_SIZE);
+    int responseCode = atoi(buff);
+    if (responseCode == COPY_FILE_SUCCESS) {
+        printf("File copied successfully!\n");
+    } else if (responseCode == COPY_FILE_FAIL) {
+        printf("Failed to copy file.\n");
+    } else if (responseCode == PATH_NOT_EXIST) {
+        printf("Path does not exist.\n");
+    } else {
+        printf("Unknown error occurred.\n");
+    }
+}
+
+void moveFile(int sock, char groupName[50]) {
+    char source_file_path[100], dest_file_path[100], buff[BUFF_SIZE];
+    clearBuff();
+
+    printf("Enter the source file path: ");
+    fgets(source_file_path, sizeof(source_file_path), stdin);
+    source_file_path[strcspn(source_file_path, "\n")] = '\0';
+
+    printf("Enter the destination file path: ");
+    fgets(dest_file_path, sizeof(dest_file_path), stdin);
+    dest_file_path[strcspn(dest_file_path, "\n")] = '\0';
+
+    snprintf(buff, BUFF_SIZE, "%d %s|%s", MOVE_FILE_REQUEST, source_file_path, dest_file_path);
+    sendWithCheck(sock, buff, strlen(buff), 0);
+
+    readWithCheck(sock, buff, BUFF_SIZE);
+    int responseCode = atoi(buff);
+    if (responseCode == MOVE_FILE_SUCCESS) {
+        printf("File moved successfully!\n");
+    } else if (responseCode == MOVE_FILE_FAIL) {
+        printf("Failed to move file.\n");
+    } else if (responseCode == PATH_NOT_EXIST) {
+        printf("Path does not exist.\n");
+    } else if (responseCode == NOT_OWNER_OF_GROUP) {
+        printf("Only leader can do this.\n");
+    } else {
+        printf("Unknown error occurred.\n");
+    }
+}
+
+void deleteFile(int sock, char groupName[50]) {
+    char file_path[100], buff[BUFF_SIZE];
+    clearBuff();
+
+    printf("Enter the file path to delete: ");
+    fgets(file_path, sizeof(file_path), stdin);
+    file_path[strcspn(file_path, "\n")] = '\0';
+
+    snprintf(buff, BUFF_SIZE, "%d %s", DELETE_FILE_REQUEST, file_path);
+    sendWithCheck(sock, buff, strlen(buff), 0);
+
+    readWithCheck(sock, buff, BUFF_SIZE);
+    int responseCode = atoi(buff);
+    if (responseCode == DELETE_FILE_SUCCESS) {
+        printf("File deleted successfully!\n");
+    } else if (responseCode == DELETE_FILE_FAIL) {
+        printf("Failed to delete file.\n");
+    } else if (responseCode == NOT_BELONG_THAT_GROUP) {
+        printf("You do not belong to the group specified in the file path.\n");
+    } else if (responseCode == NOT_OWNER_OF_GROUP) {
+        printf("Only leader can do this.\n");
+    } else {
+        printf("Path file not exists.\n");
+    }
+}
+
 int receiveFile(int sock, char fname[100]){
 	int bytesReceived = 0;
 	char recvBuff[1024];
@@ -1079,6 +1197,22 @@ void navigation(int sock) {
 
                                     case 17:
                                         moveFolder(sock, available_group[selected_group - 1]);
+                                        break;
+
+                                    case 18:
+                                        renameFile(sock, available_group[selected_group - 1]);
+                                        break;
+
+                                    case 19:
+                                        copyFile(sock, available_group[selected_group - 1]);
+                                        break;
+                                    
+                                    case 20:
+                                        moveFile(sock, available_group[selected_group - 1]);
+                                        break;
+
+                                    case 21:
+                                        deleteFile(sock, available_group[selected_group - 1]);
                                         break;
 
                                     case 11:
