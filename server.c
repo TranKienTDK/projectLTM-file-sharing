@@ -16,6 +16,7 @@
 #include <time.h>
 #include <pthread.h>
 #include <asm-generic/socket.h>
+#include <dirent.h>
 
 #define BUFF_SIZE 256
 singleList users, groups, requests, files;
@@ -1068,6 +1069,109 @@ int createGroup(int sock, singleList * groups, user_struct *loginUser, char *dat
     }
 }
 
+int createFolder(int sock, char group_name[50], char *data) {
+    char folder_name[50];
+    char folder_path[256];
+    char full_path[512];
+    struct stat st = {0};
+
+    // Parse foldername and folderpath from data
+    sscanf(data, "%[^|]|%s", folder_name, folder_path);
+
+    // Verify the group_name is part of the folderpath
+    char expected_prefix[100];
+    snprintf(expected_prefix, sizeof(expected_prefix), "/%s/", group_name);
+
+    if (strncmp(folder_path, expected_prefix, strlen(expected_prefix)) != 0) {
+        printf("Error: Folder path does not start with the correct group name.\n");
+        sendCode(sock, PATH_NOT_EXIST);
+        return -1;
+    }
+
+    // Create the directory if it does not exist
+    snprintf(full_path, sizeof(full_path), "./files%s", folder_path);
+    char *last_slash = strrchr(full_path, '/');
+    if (last_slash != NULL) {
+        *last_slash = '\0'; // Temporarily terminate the string at the last slash to check the parent directory
+        if (stat(full_path, &st) == 0 && S_ISDIR(st.st_mode)) {
+            *last_slash = '/'; // Restore the full path
+            if (mkdir(full_path, 0777) == -1) {
+                perror("Failed to create folder");
+                sendCode(sock, PATH_NOT_EXIST);
+                return -1;
+            }
+        } else {
+            printf("Parent directory does not exist.\n");
+            sendCode(sock, PATH_NOT_EXIST);
+            return -1;
+        }
+    }
+
+    printf("Folder created successfully: %s\n", full_path);
+    sendCode(sock, CREATE_FOLDER_SUCCESS);
+    return 0;
+}
+
+int viewFolderData(int sock, char group_name[50], char *data) {
+    char folder_path[50];
+    char full_path[100];
+    DIR *dp;
+    struct dirent *entry;
+    char response[100] = "";
+    char message[100];
+	char extracted_group_name[50];
+
+    // Parse the folder path from the received data
+    sscanf(data, "%s", folder_path);
+
+    // Build the full directory path
+    snprintf(full_path, sizeof(full_path), "./files/%s", folder_path);
+
+	if (sscanf(full_path, "./files/%49[^/]", extracted_group_name) == 1) {
+        // Check if the extracted group name matches the provided group name
+        if (strcmp(extracted_group_name, group_name) != 0) {
+            snprintf(response, BUFF_SIZE, "%d %s", VIEW_FOLDER_FAIL, "Group name does not match the requested folder path.");
+            sendWithCheck(sock, response, strlen(response), 0);
+            return -1;
+        }
+	}
+
+    // // Check if the folder path starts with the correct group name
+    // if (strstr(full_path, group_name) != full_path + 7) {
+    //     snprintf(message, BUFF_SIZE, "%d %s", PATH_NOT_EXIST, "Group name does not match the requested folder path.");
+    //     sendWithCheck(sock, message, strlen(message), 0);
+    //     return -1;
+    // }
+
+    // Open the directory
+    dp = opendir(full_path);
+    if (!dp) {
+        snprintf(message, BUFF_SIZE, "%d %s", PATH_NOT_EXIST, "Directory does not exist.");
+        sendWithCheck(sock, message, strlen(message), 0);
+        return -1;
+    }
+
+    // List the contents of the directory
+    while ((entry = readdir(dp)) != NULL) {
+        if (strcmp(entry->d_name, ".") != 0 && strcmp(entry->d_name, "..") != 0) {
+            if (strlen(response) > 0) {
+                strcat(response, "+"); // Append '+' before each entry except the first
+            }
+            strcat(response, entry->d_name);
+        }
+    }
+    closedir(dp);
+
+    // Send the response back to the client
+    if (strlen(response) == 0) {
+        snprintf(response, BUFF_SIZE, "No files or directories.");
+    }
+
+    snprintf(message, BUFF_SIZE, "%d %s", VIEW_FOLDER_SUCCESS, response);
+    sendWithCheck(sock, message, strlen(message), 0);
+    return 0;
+}
+
 char* getOwnerOfGroup(singleList groups, char group_name[50]) {
     groups.cur = groups.root; // Bắt đầu duyệt từ gốc danh sách
     while (groups.cur != NULL) {
@@ -1080,60 +1184,39 @@ char* getOwnerOfGroup(singleList groups, char group_name[50]) {
     return NULL; // Trả về NULL nếu không tìm thấy nhóm
 }
 
-void uploadFile(int sock, user_struct *loginUser){
-	char buff[50], filePath[100], group_name[50], file_name[50], today[50];
+void uploadFile(int sock, user_struct *loginUser, char group_name[50], char *data){
+    char *fileName, *filePath, *pathToUpload;
+	char fullPath[150];
+    int bytesReceived;
+	char extracted_groupName[50];
+    
+    // Parse data from data
+    int requestCode;
+    // Lấy token đầu tiên và gán cho fileName
+    fileName = strtok(data, "|");
 
-	sendCode(sock, UPLOAD_SUCCESS);
+    // Lấy token tiếp theo và gán cho filePath
+    if (fileName != NULL) {
+        filePath = strtok(NULL, "|");
+    }
 
-	while(1){
-		readWithCheck(sock, buff, BUFF_SIZE);
-		strcpy(group_name, buff);
-		printf("group_name: %s\n - %ld", buff, strlen(buff));
-		readWithCheck(sock, buff, BUFF_SIZE);
-		buff[strlen(buff) - 1] = '\0';
-		strcpy(file_name, buff);
-		if(checkExistence(3, files, file_name) == 1){
-			sendCode(sock, EXISTENCE_FILE_NAME);
-		}else{
-			sendCode(sock, UPLOAD_SUCCESS);
-			break;
-		}
-	}
+    // Lấy token cuối cùng và gán cho pathToUpload
+    if (filePath != NULL) {
+        pathToUpload = strtok(NULL, "|");
+    }
 
-	filePath[0] = '\0';
-	strcat(filePath, "./files/");
-	strcat(filePath, group_name);
-	strcat(filePath, "/");
-	strcat(filePath, file_name);
-
-	receiveUploadedFile(sock, filePath);
-
-	// get date of upload
-	time_t t = time(NULL);
-	struct tm tm = *localtime(&t);
-	sprintf( today, "%02d-%02d-%d", tm.tm_mday, tm.tm_mon + 1, tm.tm_year + 1900);
-
-	file_struct *file = (file_struct*)malloc(sizeof(file_struct));
-	strcpy(file->name, file_name);
-	strcpy(file->group, group_name);
-	strcpy(file->owner, loginUser->user_name);
-	strcpy(file->uploaded_at, today);
-	file->downloaded_times = 0;
-
-	insertEnd(&files, file);
-	groups.cur = groups.root;
-	while(groups.cur != NULL){
-		if(strcmp(group_name, ((group_struct*)groups.cur->element)->group_name) == 0){
-			((group_struct*)groups.cur->element)->number_of_files += 1;
-			//singleList files = ((group_struct*)groups.cur->element)->files;
-			simple_file_struct *file_element = (simple_file_struct*) malloc(sizeof(simple_file_struct));
-			strcpy(file_element->file_name, file_name);
-			insertEnd(&((group_struct*)groups.cur->element)->files, file_element); 
-		}
-		groups.cur = groups.cur->next;
-	} 
-	writeToGroupFile(groups);
-	saveFiles(files);
+	 // Construct the full path in the files directory
+    snprintf(fullPath, sizeof(fullPath), "./files/%s/%s", group_name, pathToUpload);
+    sscanf(fullPath, "files/%49[^/]/", extracted_groupName);
+	printf("%s\n", fullPath);
+	int result = receiveUploadedFile(sock, fullPath);
+    // Process request based on request code
+        // printf("Received upload request for file: %s\n", fileName);
+        // printf("Local path: %s\n", filePath);
+        // printf("Upload path: %s\n", pathToUpload);
+        
+        // Proceed to receive file from client and save it at the specified path
+        
 }
 
 int receiveUploadedFile(int sock, char filePath[100]){
@@ -1175,8 +1258,48 @@ int receiveUploadedFile(int sock, char filePath[100]){
 	}
 	
 	printf("\nFile OK....Completed\n");
+	sendCode(sock, UPLOAD_SUCCESS);
 	return 1;
 }
+
+// int receiveUploadedFile(int sock, char filePath[100]) {
+//     int bytesReceived = 0;
+//     char recvBuff[1024];
+//     FILE *fp;
+
+//     printf("Receiving file...\n");
+//     fp = fopen(filePath, "ab");
+//     if (fp == NULL) {
+//         printf("Error opening file\n");
+//         return -1;
+//     }
+
+//     double sz = 1;
+//     while ((bytesReceived = readWithCheck(sock, recvBuff, 1024)) > 0) {
+//         fwrite(recvBuff, 1, bytesReceived, fp);
+//         sz += bytesReceived;
+//         printf("Received: %lf Mb\n", (sz / 1024));
+//         if (bytesReceived < 1024) {
+//             char endSignal[4];
+// 			int n = readWithCheck(sock, endSignal, 4);
+// 			if (n > 0) {
+//     			endSignal[n] = '\0';  // Đảm bảo nó là chuỗi kết thúc
+// 				if (strcmp(endSignal, "EOF") == 0) {
+// 					printf("Received EOF signal, file transfer completed.\n");
+// 					sendCode(sock, UPLOAD_SUCCESS);
+// 					fclose(fp);
+// 				} else {
+// 					printf("Expected EOF, received: %s\n", endSignal);
+// 				}
+// 			} else {
+// 				printf("Error receiving EOF signal.\n");
+// 			}
+//         }
+//     }
+//     fclose(fp);
+//     printf("File OK... Completed\n");
+//     return 1;
+// }
 
 void * handleThread(void *my_sock) {
     int new_socket = *((int *)my_sock);
@@ -1286,8 +1409,8 @@ void * handleThread(void *my_sock) {
 											if (isUserAMember(users, current_group, loginUser->user_name) == 1)
 											{
 												printf("UPLOAD_REQUEST\n");
-												uploadFile(new_socket, loginUser);
-												writeToGroupFile(groups);
+												uploadFile(new_socket, loginUser, current_group, data);
+												
 											}
 											else
 											{
@@ -1483,6 +1606,15 @@ void * handleThread(void *my_sock) {
 												REQUEST = BACK_REQUEST;
 											}
 											// REQUEST = BACK_REQUEST;
+											break;
+
+										case CREATE_FOLDER_REQUEST:
+											printf("CREATE_FOLDER_REQUEST\n");
+											int result = createFolder(new_socket, current_group, data);
+											break;
+
+										case VIEW_FOLDER_REQUEST:
+											viewFolderData(new_socket, current_group, data);
 											break;
 
 										case BACK_REQUEST:

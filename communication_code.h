@@ -27,6 +27,8 @@
 #define VIEW_USER_NOT_IN_GROUP 145
 #define VIEW_USER_IN_GROUP 146
 #define VIEW_REQUEST_IN_GROUP 147
+#define CREATE_FOLDER_REQUEST 148
+#define VIEW_FOLDER_REQUEST 149
 
 
 //==================================================//
@@ -47,6 +49,8 @@
 #define ACCEPT_SUCCESS 812
 #define QUIT_GROUP_SUCCESS 813
 #define KICK_MEMBER_SUCCESS 814
+#define CREATE_FOLDER_SUCCESS 815
+#define VIEW_FOLDER_SUCCESS 816
 
 
 //==================================================//
@@ -72,5 +76,8 @@
 #define IS_OWNER_OF_GROUP 917
 #define NO_FILE_TO_RENAME 918
 #define JOINED_ALL_GROUP 920
+#define PATH_NOT_EXIST 921
+#define VIEW_FOLDER_FAIL 922
+#define UPLOAD_FAILED 923
 #define INVALID_FORMAT 999
 //==================================================//
