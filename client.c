@@ -157,7 +157,7 @@ int menu2() {
 	printf("1. Create group\n");
     printf("2. Join group\n");
     printf("3. Access joined group\n");
-	printf("4. Notifications\n");
+	printf("4. View all group\n");
     printf("5. Logout\n");
 	printf("=========================================================\n");
     printf("=> Enter your choice: ");
@@ -364,6 +364,7 @@ void* SendFileToServer(int new_socket, char fname[50])
             write(new_socket, buff, nread);
         }
 		readWithCheck(new_socket, buff, BUFF_SIZE);
+        
 		if(strcasecmp(buff, "continue") != 0){
 			break;
 		}
@@ -380,35 +381,32 @@ void* SendFileToServer(int new_socket, char fname[50])
     }
 }
 
-// void* SendFileToServer(int new_socket, char fname[100]) {
-//     FILE *fp = fopen(fname, "rb");
-//     if (fp == NULL) {
-//         printf("File open error\n");
-//         return NULL;
-//     }
-
-//     unsigned char buff[1024] = {0};
-//     int nread;
-
-//     while ((nread = fread(buff, 1, 1024, fp)) > 0) {
-//         write(new_socket, buff, nread);
-//         if (nread < 1024) {
-//             if (feof(fp)) {
-//                 printf("End of file\n");
-//                 sendWithCheck(new_socket, "EOF", 4, 0);  // Gửi thông báo EOF đến server
-//                 break;
-//             }
-//             if (ferror(fp)) {
-//                 printf("Error reading\n");
-//                 break;
-//             }
+// void downloadFile(int sock)
+// {
+//     char pathtoDownLoad[100];
+//     while (1)
+//     {
+//         printf("Enter file path to download: ");
+//         fgets(pathtoDownLoad, sizeof(pathtoDownLoad), stdin);
+//         pathtoDownLoad[strcspn(pathtoDownLoad, "\n")] = '\0';
+//         if (strlen(pathtoDownLoad) == 0)
+//         {
+//             printf("File path is empty! Try again.\n");
 //         }
+//         else
+//         {
+//             break;
+//         }
+//         break;
 //     }
-//     fclose(fp);
+//     printf("%s\n", pathtoDownLoad);
+
+//     snprintf(send, sizeof(send), "%d %s", DOWNLOAD_REQUEST, pathtoDownLoad);
+//     sendWithCheck(sock, send, strlen(send), 0);
 // }
 
 int uploadFile(int sock, char groupName[50]){
-	char fileName[50], filePath[100], pathToUpload[100];
+	char filePath[100], pathToUpload[100];
 	char buffer[BUFF_SIZE];
     char send[BUFF_SIZE];
     char* response_code;
@@ -417,17 +415,6 @@ int uploadFile(int sock, char groupName[50]){
     clearBuff();
 
     while (1) {
-        printf("Enter file name: ");
-        fgets(fileName, sizeof(fileName), stdin);
-        fileName[strcspn(fileName, "\n")] = '\0';
-        if (strlen(fileName) == 0) {
-            printf("File name is empty! Try again.\n");
-        } else {
-            break;
-        }
-    }
-
-    do {
         printf("Enter path to file on your system: ");
         fgets(filePath, sizeof(filePath), stdin);
         filePath[strcspn(filePath, "\n")] = '\0';
@@ -441,7 +428,7 @@ int uploadFile(int sock, char groupName[50]){
         } else {
             printf("File is not available!\n");
         }
-    } while(1);
+    }
 
     while(1) {
         printf("Enter path to upload: ");
@@ -452,13 +439,21 @@ int uploadFile(int sock, char groupName[50]){
         } else {
             break;
         }
+        break;
     }
-    printf("%s %s %s\n", fileName, filePath, pathToUpload);
+    printf("%s %s\n", filePath, pathToUpload);
 
-    snprintf(send, sizeof(send), "%d %s|%s|%s", UPLOAD_REQUEST, fileName, filePath, pathToUpload);
+    snprintf(send, sizeof(send), "%d %s", UPLOAD_REQUEST, pathToUpload);
     sendWithCheck(sock, send, strlen(send), 0);
     memset(buffer, 0, sizeof(buffer));
 
+    readWithCheck(sock, buffer, BUFF_SIZE);
+    response_code = strtok(buffer, " ");
+    RESPONSE = atoi(response_code);
+    data = strtok(NULL, " ");
+    if(RESPONSE == MEMBER_WAS_KICKED){
+        return 0;
+    }
     SendFileToServer(sock, filePath);
 
     readWithCheck(sock, buffer, BUFF_SIZE);
@@ -660,10 +655,57 @@ void moveFolder(int sock, char groupName[50]) {
     }
 }
 
+int receiveFile(int sock, char fname[100]){
+	int bytesReceived = 0;
+	char recvBuff[1024];
+	memset(recvBuff, '0', sizeof(recvBuff));
+	FILE *fp;
+	char path[100];
+	path[0] = '\0';
+	strcat(path, "./client_source/");
+	strcat(path, fname);
+	printf("File Name: %s\n",path);
+	printf("Receiving file...");
+	fp = fopen(path, "ab"); 
+	if(NULL == fp)
+	{
+		printf("Error opening file");
+		return 1;
+	}
+	double sz=1;
+	/* Receive data in chunks of 256 bytes */
+	while((bytesReceived = readWithCheck(sock, recvBuff, 1024)) > 0)
+	{
+		system("clear"); 
+		
+		printf("\n\n\nbytes = %d\n",bytesReceived);
+		sz++;
+		printf("Received: %lf Mb\n",(sz/1024));
+		fflush(stdout);
+		// recvBuff[n] = 0;
+		fwrite(recvBuff, 1,bytesReceived,fp);
+
+		if(bytesReceived < 1024){
+			sendWithCheck(sock, "broken", 7, 0);
+			break;
+		}else{
+			sendWithCheck(sock, "continue", 9, 0);
+		}
+	}
+	fclose(fp);
+	if(bytesReceived < 0)
+	{
+		printf("\n Read Error \n");
+		return 0;
+	}
+	printf("\nFile OK....Completed\n");
+	return 1;
+}
+
 // MENU APPLICATION
 void navigation(int sock) {
     int z1, z2, z3;
-    char buffer[100], code[10], username[50], password[50];
+    char buffer[100], code[10], username[50], password[50], pathtoDownLoad[100];
     char send[BUFF_SIZE];
     char* response_code;
 	char* data;
@@ -860,27 +902,71 @@ void navigation(int sock) {
 
                                     case 1:
                                         if( uploadFile(sock, available_group[selected_group-1]) == 1){
-										    
-									    }
-                                        //uploadFile(sock, available_group[selected_group-1]);
+										    break;
+									    }      
+                                        else{
+                                            z3 = 11;
+                                        }                                 
 									    break;
+                                    case 2:
+                                        while (1)
+                                        {
+                                            printf("Enter file path to download: ");
+                                            fgets(pathtoDownLoad, sizeof(pathtoDownLoad), stdin);
+                                            pathtoDownLoad[strcspn(pathtoDownLoad, "\n")] = '\0';
+                                            if (strlen(pathtoDownLoad) == 0)
+                                            {
+                                                printf("File path is empty! Try again.\n");
+                                            }
+                                            else
+                                            {
+                                                break;
+                                            }
+                                        }
+                                        printf("%s\n", pathtoDownLoad);
 
+                                        snprintf(send, sizeof(send), "%d %s", DOWNLOAD_REQUEST, pathtoDownLoad);
+                                        sendWithCheck(sock, send, strlen(send), 0);
+                                        memset(buffer, 0, sizeof(buffer));
+                                        readWithCheck(sock, buffer, 1000);
+                                        response_code = strtok(buffer, " ");
+                                        RESPONSE = atoi(response_code);
+                                        data = strtok(NULL, " ");
+                                        if (atoi(buffer) != MEMBER_WAS_KICKED)
+                                        {
+                                            char *lastSlash = strrchr(pathtoDownLoad, '/');
+                                            char *result = (lastSlash == NULL) ? pathtoDownLoad : lastSlash + 1;
+                                            printf("nhan data: %s\n", result);
+                                            if(receiveFile(sock, result) == 1){
+												printf("Download successfully\n");
+                                            }
+											
+                                        }
+                                        else
+                                        {
+                                            printf("You have been kicked out of this group.\n");
+                                            z3 = 11;
+                                        }
+                                        break;
                                     case 5:
-									printf("======================= All Files ========================\n");
-									sendCode(sock, VIEW_FILES_REQUEST);
-									memset(buffer, 0, sizeof(buffer)); 
-                                    readWithCheck(sock, buffer, 1000);
-                                    response_code = strtok(buffer, " ");
-                                    RESPONSE = atoi(response_code);	
-                                    data = strtok(NULL, " ");
-									if(atoi(buffer) != MEMBER_WAS_KICKED){
-										char available_files[20][50] = {'\0','\0','\0','\0','\0','\0','\0','\0','\0','\0','\0','\0','\0','\0','\0','\0','\0','\0','\0','\0'};
-										int number_of_available_files = printAvailableElements(buffer, available_files);
-									}else{
-										printf("You have been kicked out of this group.\n");
-										z3 = 11;
-									}
-									break;
+                                        printf("======================= All Files ========================\n");
+                                        sendCode(sock, VIEW_FILES_REQUEST);
+                                        memset(buffer, 0, sizeof(buffer));
+                                        readWithCheck(sock, buffer, 1000);
+                                        response_code = strtok(buffer, " ");
+                                        RESPONSE = atoi(response_code);
+                                        data = strtok(NULL, " ");
+                                        if (atoi(buffer) != MEMBER_WAS_KICKED)
+                                        {
+                                            char available_files[20][50] = {'\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0'};
+                                            int number_of_available_files = printAvailableElements(buffer, available_files);
+                                        }
+                                        else
+                                        {
+                                            printf("You have been kicked out of this group.\n");
+                                            z3 = 11;
+                                        }
+                                        break;
 
                                     case 8:
                                         sendCode(sock, VIEW_USER_IN_GROUP);
@@ -1003,57 +1089,37 @@ void navigation(int sock) {
                             }
                             break;
                         case 4:
-                            sendCode(sock, NOTIFICATION_REQUEST);
+                            sendCode(sock, VIEW_ALL_GROUP_REQUEST);
                             memset(buffer, 0, sizeof(buffer));
                             readWithCheck(sock, buffer, 1000);
                             response_code = strtok(buffer, " ");
-                            RESPONSE = atoi(response_code);	
-		                    data = strtok(NULL, " ");
-                            printf("====================== Notifications ======================\n");
-                            char available_notifications[20][50] = {'\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0'};
-                            int number_of_available_notifications = printAvailableElements(data, available_notifications);
-                            if (RESPONSE == NOTIFICATION_REQUEST)
-                            {
-                                int selected_notification;
-                                printf("Which group request do you want to accept? (1-%d): Or 0 to back ", number_of_available_notifications);
-                                scanf("%d", &selected_notification);
-                                if (selected_notification == 0)
+                            RESPONSE = atoi(response_code);
+                            data = strtok(NULL, " ");
+                            printf("====================== All group ======================\n");
+                                char available_members[20][50] = {'\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0'};
+                                int number_of_available_members = printAvailableElements(data, available_members);
+                                if (number_of_available_members > 0)
                                 {
-                                    break;
-                                }
-                                snprintf(send, sizeof(send), "%d %s", ACCEPT_INVITE_REQUEST, available_notifications[selected_notification - 1]);     
-                                sendWithCheck(sock, send, strlen(send), 0);
-                                memset(buffer, 0, sizeof(buffer));
-                                readWithCheck(sock, buffer, 1000);
-                                response_code = strtok(buffer, " ");
-                                RESPONSE = atoi(response_code);	
-		                        data = strtok(NULL, " ");                              
-                                if (RESPONSE == ACCEPT_SUCCESS)
-                                {
-                                    printf("Accept successfully\n");
+                                    
                                 }
                                 else
                                 {
-                                    printf("Something wrong!!!\n");
+                                    printf("No have group\n");
                                 }
+                                break;
+                            case 5:
+                                sendCode(sock, LOGOUT_REQUEST);
+                                readWithCheck(sock, buffer, BUFF_SIZE);
+                                printf("-->Logout: %s\n", buffer);
+                                if (atoi(buffer) == LOGOUT_SUCCESS)
+                                {
+                                    printf("Logout successfully.\n");
+                                }
+                                break;
+                            default:
+                                z2 = 1;
+                                break;
                             }
-                            else
-                            {
-                                printf("You have no notifications\n");
-                            }
-                            break;
-                        case 5:
-                            sendCode(sock, LOGOUT_REQUEST);
-                            readWithCheck(sock, buffer, BUFF_SIZE);
-                            printf("-->Logout: %s\n", buffer);
-                            if (atoi(buffer) == LOGOUT_SUCCESS) {
-                                printf("Logout successfully.\n");
-                            }
-                            break;
-                        default:
-                            z2 = 1;
-                            break;
-                    }
                 } while(z2 >= 1 && z2 < 5);
             }
             break;

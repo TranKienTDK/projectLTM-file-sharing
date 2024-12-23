@@ -1,10 +1,8 @@
 nhom1
 trong
 0
-1
-ltm123.txt
+0
 nhom2
-trong
-1
-kien
+linh
+0
 0
