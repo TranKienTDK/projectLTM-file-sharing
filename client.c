@@ -190,6 +190,8 @@ int menu3(char group_name[50]) {
 	printf("9. View all users\n");
 	printf("10. Quit group\n");
 	printf("11. Back\n");
+    printf("12. Create folder\n");
+    printf("13. View folder\n");  
 	printf("==========================================================\n");
     printf("=> Enter your choice: ");
     catch = scanf("%d", &choice);
@@ -377,53 +379,187 @@ void* SendFileToServer(int new_socket, char fname[50])
     }
 }
 
+// void* SendFileToServer(int new_socket, char fname[100]) {
+//     FILE *fp = fopen(fname, "rb");
+//     if (fp == NULL) {
+//         printf("File open error\n");
+//         return NULL;
+//     }
+
+//     unsigned char buff[1024] = {0};
+//     int nread;
+
+//     while ((nread = fread(buff, 1, 1024, fp)) > 0) {
+//         write(new_socket, buff, nread);
+//         if (nread < 1024) {
+//             if (feof(fp)) {
+//                 printf("End of file\n");
+//                 sendWithCheck(new_socket, "EOF", 4, 0);  // Gửi thông báo EOF đến server
+//                 break;
+//             }
+//             if (ferror(fp)) {
+//                 printf("Error reading\n");
+//                 break;
+//             }
+//         }
+//     }
+//     fclose(fp);
+// }
+
 int uploadFile(int sock, char groupName[50]){
-	char fileName[50], filePath[100];
+	char fileName[50], filePath[100], pathToUpload[100];
 	char buffer[BUFF_SIZE];
+    char send[BUFF_SIZE];
+    char* response_code;
+    char* data;
+    int RESPONSE;
+    clearBuff();
 
-	sendCode(sock, UPLOAD_REQUEST);
-	readWithCheck(sock, buffer, BUFF_SIZE);
-	if(atoi(buffer) != MEMBER_WAS_KICKED){
-		if(atoi(buffer) == UPLOAD_SUCCESS){
-			clearBuff();
-			while(1){
-				sendWithCheck(sock, groupName, strlen(groupName) + 1, 0);
+    while (1) {
+        printf("Enter file name: ");
+        fgets(fileName, sizeof(fileName), stdin);
+        fileName[strcspn(fileName, "\n")] = '\0';
+        if (strlen(fileName) == 0) {
+            printf("File name is empty! Try again.\n");
+        } else {
+            break;
+        }
+    }
 
-				printf("Enter file name: ");
-				fgets(fileName, 50, stdin);
+    do {
+        printf("Enter path to file on your system: ");
+        fgets(filePath, sizeof(filePath), stdin);
+        filePath[strcspn(filePath, "\n")] = '\0';
+        if (strlen(filePath) == 0) {
+            printf("File path is empty! Try again.\n");
+        } else {
+            break;
+        }
+        if (fopen(filePath, "r") != NULL) {
+            break;
+        } else {
+            printf("File is not available!\n");
+        }
+    } while(1);
 
-				sendWithCheck(sock, fileName, sizeof(fileName), 0);
-				readWithCheck(sock, buffer, BUFF_SIZE);
-				if(atoi(buffer) == EXISTENCE_FILE_NAME){
-					printf("File name is not available.\n");
-				}else{
-					do{
-						printf("Enter path to file: ");
-						fgets(buffer, 100, stdin);
-						buffer[strlen(buffer) - 1] = '\0';
-						if(fopen(buffer, "r") != NULL){
-							break;
-						}else{
-							printf("File is not available!!\n");
-						}
-					}while(1);
-					break;
-				}
-			}
-			filePath[0] = '\0';
-			strcat(filePath, buffer);
-			SendFileToServer(sock, filePath);
+    while(1) {
+        printf("Enter path to upload: ");
+        fgets(pathToUpload, sizeof(pathToUpload), stdin);
+        pathToUpload[strcspn(pathToUpload, "\n")] = '\0';
+        if (strlen(pathToUpload) == 0) {
+            printf("File path is empty! Try again.\n");
+        } else {
+            break;
+        }
+    }
+    printf("%s %s %s\n", fileName, filePath, pathToUpload);
 
-			
-		}else{
-			printf("System is under maintainace!!\n");
-		}
-	}else{
-		printf("You have been kicked out of this group!!!\n");
-		return 0;
-	}
-	return 1;
+    snprintf(send, sizeof(send), "%d %s|%s|%s", UPLOAD_REQUEST, fileName, filePath, pathToUpload);
+    sendWithCheck(sock, send, strlen(send), 0);
+    memset(buffer, 0, sizeof(buffer));
+
+    SendFileToServer(sock, filePath);
+
+    readWithCheck(sock, buffer, BUFF_SIZE);
+    response_code = strtok(buffer, " ");
+    RESPONSE = atoi(response_code);
+    data = strtok(NULL, " ");
+    printf("data: %d\n", RESPONSE);
+    if (RESPONSE == UPLOAD_SUCCESS) {
+        printf("Upload file successfully!\n");
+        return 1;
+    } else {
+        printf("Cannot upload file! Error system!\n");
+        return 0;
+    }
+    return 0;
 }
+
+void createFolder(int sock) {
+    char folder_name[50], folder_path[50], buff[BUFF_SIZE];
+    clearBuff();
+    while (1) {
+        printf("Enter folder name: ");
+        fgets(folder_name, sizeof(folder_name), stdin);
+        folder_name[strcspn(folder_name, "\n")] = '\0';
+        if (strlen(folder_name) == 0) {
+            printf("Folder name is empty! Try again.\n");
+        } else {
+            break;
+        }
+    }
+
+    while (1) {
+        printf("Enter folder path: ");
+        fgets(folder_path, sizeof(folder_path), stdin);
+        folder_path[strcspn(folder_path, "\n")] = '\0';
+        if (strlen(folder_path) == 0) {
+            printf("Folder path is empty! Try again.\n");
+        } else {
+            break;
+        }
+    }
+
+    snprintf(buff, BUFF_SIZE, "%d %s|%s", CREATE_FOLDER_REQUEST, folder_name, folder_path); 
+    sendWithCheck(sock, buff, strlen(buff), 0);
+
+    readWithCheck(sock, buff, BUFF_SIZE);
+    int responseCode = atoi(buff);
+    if (responseCode == CREATE_FOLDER_SUCCESS) {
+        printf("Folder created successfully!\n");
+    } else {
+        printf("Failed to create folder. Error code: %d\n", responseCode);
+    }
+}
+
+void viewFolderData(int sock) {
+    char folder_path[50], buff[BUFF_SIZE];
+    char send[BUFF_SIZE];
+    char* response_code;
+    char* data;
+    int RESPONSE;
+    clearBuff();
+
+    while (1) {
+        printf("Enter folder path: ");
+        fgets(folder_path, sizeof(folder_path), stdin);
+        folder_path[strcspn(folder_path, "\n")] = '\0';  // Remove newline character
+        if (strlen(folder_path) == 0) {
+            printf("Folder path is empty! Try again.\n");
+        } else {
+            break;
+        }
+    }
+
+    // snprintf(buff, BUFF_SIZE, "%d %s", VIEW_FOLDER_REQUEST, folder_path);
+    // sendWithCheck(sock, buff, strlen(buff), 0);
+
+    snprintf(send, sizeof(send), "%d %s", VIEW_FOLDER_REQUEST, folder_path);
+    sendWithCheck(sock, send, strlen(send), 0);
+    memset(buff, 0, sizeof(buff));
+
+    readWithCheck(sock, buff, BUFF_SIZE);
+    printf("%s\n", buff);
+    response_code = strtok(buff, " ");
+    RESPONSE = atoi(response_code);
+    data = strtok(NULL, " ");
+    // int responseCode = atoi(buff);
+    if (RESPONSE == VIEW_FOLDER_SUCCESS) {
+        // char *data = strchr(buff, ' ') + 1;  // Assuming the data starts after the first space
+        char *token = strtok(data, "+");
+
+        printf("Folder contents:\n");
+        while (token != NULL) {
+            printf("%s\n", token);
+            token = strtok(NULL, "+");
+        }
+    } else if (RESPONSE == VIEW_FOLDER_FAIL) {
+        printf("You cannot view folder of another group!\n");
+    } else {
+        printf("Failed to view folder contents\n");
+    }
+}
+
 
 
 // MENU APPLICATION
@@ -625,9 +761,10 @@ void navigation(int sock) {
                                         break;
 
                                     case 1:
-                                        if( uploadFile(sock, available_group[selected_group-1]) == 0){
-										    z3 = 11;
+                                        if( uploadFile(sock, available_group[selected_group-1]) == 1){
+										    
 									    }
+                                        //uploadFile(sock, available_group[selected_group-1]);
 									    break;
 
                                     case 5:
@@ -734,7 +871,15 @@ void navigation(int sock) {
                                         } else {
                                             printf("Something wrong!\n");
                                         }
-                                        break; 
+                                        break;
+
+                                    case 12:
+                                        createFolder(sock);
+                                        break;
+
+                                    case 13:
+                                        viewFolderData(sock);
+                                        break;
 
                                     case 11:
                                         sendCode(sock, BACK_REQUEST);
