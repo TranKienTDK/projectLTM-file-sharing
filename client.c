@@ -191,7 +191,11 @@ int menu3(char group_name[50]) {
 	printf("10. Quit group\n");
 	printf("11. Back\n");
     printf("12. Create folder\n");
-    printf("13. View folder\n");  
+    printf("13. View folder\n");
+    printf("14. Rename folder\n");
+    printf("15. Delete folder\n");
+    printf("16. Copy folder\n");
+    printf("17. Move folder\n");  
 	printf("==========================================================\n");
     printf("=> Enter your choice: ");
     catch = scanf("%d", &choice);
@@ -254,9 +258,6 @@ void signUp(int sock) {
         printf("System is under maintenance!\n");
     }
 }
-
-
-
 
 
 // SIGN IN CLIENT
@@ -475,38 +476,25 @@ int uploadFile(int sock, char groupName[50]){
     return 0;
 }
 
-void createFolder(int sock) {
-    char folder_name[50], folder_path[50], buff[BUFF_SIZE];
+void createFolder(int sock, char groupName[50]) {
+    char folder_path[100], buff[BUFF_SIZE];
     clearBuff();
-    while (1) {
-        printf("Enter folder name: ");
-        fgets(folder_name, sizeof(folder_name), stdin);
-        folder_name[strcspn(folder_name, "\n")] = '\0';
-        if (strlen(folder_name) == 0) {
-            printf("Folder name is empty! Try again.\n");
-        } else {
-            break;
-        }
-    }
 
-    while (1) {
-        printf("Enter folder path: ");
-        fgets(folder_path, sizeof(folder_path), stdin);
-        folder_path[strcspn(folder_path, "\n")] = '\0';
-        if (strlen(folder_path) == 0) {
-            printf("Folder path is empty! Try again.\n");
-        } else {
-            break;
-        }
-    }
+    printf("Enter the folder path to create: ");
+    fgets(folder_path, sizeof(folder_path), stdin);
+    folder_path[strcspn(folder_path, "\n")] = '\0';
 
-    snprintf(buff, BUFF_SIZE, "%d %s|%s", CREATE_FOLDER_REQUEST, folder_name, folder_path); 
+    snprintf(buff, BUFF_SIZE, "%d %s", CREATE_FOLDER_REQUEST, folder_path);
     sendWithCheck(sock, buff, strlen(buff), 0);
 
     readWithCheck(sock, buff, BUFF_SIZE);
     int responseCode = atoi(buff);
     if (responseCode == CREATE_FOLDER_SUCCESS) {
         printf("Folder created successfully!\n");
+    } else if (responseCode == PATH_NOT_EXIST) {
+        printf("Parent directory does not exist.\n");
+    } else if (responseCode == FOLDER_EXISTS) {
+        printf("Folder already exists.\n");
     } else {
         printf("Failed to create folder. Error code: %d\n", responseCode);
     }
@@ -531,9 +519,6 @@ void viewFolderData(int sock) {
         }
     }
 
-    // snprintf(buff, BUFF_SIZE, "%d %s", VIEW_FOLDER_REQUEST, folder_path);
-    // sendWithCheck(sock, buff, strlen(buff), 0);
-
     snprintf(send, sizeof(send), "%d %s", VIEW_FOLDER_REQUEST, folder_path);
     sendWithCheck(sock, send, strlen(send), 0);
     memset(buff, 0, sizeof(buff));
@@ -543,9 +528,7 @@ void viewFolderData(int sock) {
     response_code = strtok(buff, " ");
     RESPONSE = atoi(response_code);
     data = strtok(NULL, " ");
-    // int responseCode = atoi(buff);
     if (RESPONSE == VIEW_FOLDER_SUCCESS) {
-        // char *data = strchr(buff, ' ') + 1;  // Assuming the data starts after the first space
         char *token = strtok(data, "+");
 
         printf("Folder contents:\n");
@@ -560,7 +543,122 @@ void viewFolderData(int sock) {
     }
 }
 
+void renameFolder(int sock, char groupName[50]) {
+    char old_folder_path[100], new_folder_name[50], buff[BUFF_SIZE];
+    clearBuff();
 
+    printf("Enter the current folder path: ");
+    fgets(old_folder_path, sizeof(old_folder_path), stdin);
+    old_folder_path[strcspn(old_folder_path, "\n")] = '\0';
+
+    printf("Enter the new folder name: ");
+    fgets(new_folder_name, sizeof(new_folder_name), stdin);
+    new_folder_name[strcspn(new_folder_name, "\n")] = '\0';
+
+    snprintf(buff, BUFF_SIZE, "%d %s|%s", RENAME_FOLDER_REQUEST, old_folder_path, new_folder_name);
+    sendWithCheck(sock, buff, strlen(buff), 0);
+
+    readWithCheck(sock, buff, BUFF_SIZE);
+    int responseCode = atoi(buff);
+    if (responseCode == RENAME_FOLDER_SUCCESS) {
+        printf("Folder renamed successfully!\n");
+    } else if (responseCode == RENAME_FOLDER_FAIL) {
+        printf("Failed to rename folder.\n");
+    } else if (responseCode == NOT_BELONG_THAT_GROUP) {
+        printf("You do not belong to the group specified in the folder path.\n");
+    } else if (responseCode == NOT_OWNER_OF_GROUP) {
+        printf("Only leader can do this.\n");
+        return;
+    } else {
+        printf("Path folder not exists.\n");
+    }
+}
+
+void deleteFolder(int sock, char groupName[50]) {
+    char folder_path[100], buff[BUFF_SIZE];
+    clearBuff();
+
+    printf("Enter the folder path to delete: ");
+    fgets(folder_path, sizeof(folder_path), stdin);
+    folder_path[strcspn(folder_path, "\n")] = '\0';
+
+    snprintf(buff, BUFF_SIZE, "%d %s", DELETE_FOLDER_REQUEST, folder_path);
+    sendWithCheck(sock, buff, strlen(buff), 0);
+
+    readWithCheck(sock, buff, BUFF_SIZE);
+    int responseCode = atoi(buff);
+    if (responseCode == DELETE_FOLDER_SUCCESS) {
+        printf("Folder deleted successfully!\n");
+    } else if (responseCode == DELETE_FOLDER_FAIL) {
+        printf("Failed to delete folder.\n");
+    } else if (responseCode == NOT_BELONG_THAT_GROUP) {
+        printf("You do not belong to the group specified in the folder path.\n");
+    } else if (responseCode == NOT_OWNER_OF_GROUP) {
+        printf("Only leader can do this.\n");
+        return;
+    } else {
+        printf("Path folder not exists.\n");
+    }
+}
+
+void copyFolder(int sock, char groupName[50]) {
+    char source_folder_path[100], dest_folder_path[100], buff[BUFF_SIZE];
+    clearBuff();
+
+    printf("Enter the source folder path: ");
+    fgets(source_folder_path, sizeof(source_folder_path), stdin);
+    source_folder_path[strcspn(source_folder_path, "\n")] = '\0';
+
+    printf("Enter the destination folder path: ");
+    fgets(dest_folder_path, sizeof(dest_folder_path), stdin);
+    dest_folder_path[strcspn(dest_folder_path, "\n")] = '\0';
+
+    snprintf(buff, BUFF_SIZE, "%d %s|%s", COPY_FOLDER_REQUEST, source_folder_path, dest_folder_path);
+    sendWithCheck(sock, buff, strlen(buff), 0);
+
+    readWithCheck(sock, buff, BUFF_SIZE);
+    int responseCode = atoi(buff);
+    if (responseCode == COPY_FOLDER_SUCCESS) {
+        printf("Folder copied successfully!\n");
+    } else if (responseCode == COPY_FOLDER_FAIL) {
+        printf("Failed to copy folder.\n");
+    } else if (responseCode == PATH_NOT_EXIST) {
+        printf("Path does not exist.\n");
+    } else {
+        printf("Unknown error occurred.\n");
+    }
+}
+
+void moveFolder(int sock, char groupName[50]) {
+    char source_folder_path[100], dest_folder_path[100], buff[BUFF_SIZE];
+    clearBuff();
+
+    printf("Enter the source folder path: ");
+    fgets(source_folder_path, sizeof(source_folder_path), stdin);
+    source_folder_path[strcspn(source_folder_path, "\n")] = '\0';
+
+    printf("Enter the destination folder path: ");
+    fgets(dest_folder_path, sizeof(dest_folder_path), stdin);
+    dest_folder_path[strcspn(dest_folder_path, "\n")] = '\0';
+
+    snprintf(buff, BUFF_SIZE, "%d %s|%s", MOVE_FOLDER_REQUEST, source_folder_path, dest_folder_path);
+    sendWithCheck(sock, buff, strlen(buff), 0);
+
+    readWithCheck(sock, buff, BUFF_SIZE);
+    int responseCode = atoi(buff);
+    if (responseCode == MOVE_FOLDER_SUCCESS) {
+        printf("Folder moved successfully!\n");
+    } else if (responseCode == MOVE_FOLDER_FAIL) {
+        printf("Failed to move folder.\n");
+    } else if (responseCode == PATH_NOT_EXIST) {
+        printf("Path does not exist.\n");
+    } else if (responseCode == NOT_OWNER_OF_GROUP) {
+        printf("Only leader can do this.\n");
+        return;
+    } else {
+        printf("Unknown error occurred.\n");
+    }
+}
 
 // MENU APPLICATION
 void navigation(int sock) {
@@ -874,11 +972,27 @@ void navigation(int sock) {
                                         break;
 
                                     case 12:
-                                        createFolder(sock);
+                                        createFolder(sock, available_group[selected_group - 1]);
                                         break;
 
                                     case 13:
                                         viewFolderData(sock);
+                                        break;
+
+                                    case 14:
+                                        renameFolder(sock, available_group[selected_group - 1]);
+                                        break;
+
+                                    case 15:
+                                        deleteFolder(sock, available_group[selected_group - 1]);
+                                        break;
+
+                                    case 16:
+                                        copyFolder(sock, available_group[selected_group - 1]);
+                                        break;
+
+                                    case 17:
+                                        moveFolder(sock, available_group[selected_group - 1]);
                                         break;
 
                                     case 11:
